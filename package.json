@@ -1,0 +1,29 @@
+{
+  "name": "dorahacks-croo-summon",
+  "version": "0.1.0",
+  "description": "Human-in-the-loop sign-off agent — any agent hires Summon to get a human Approve/Reject via Telegram",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["croo", "agent", "a2a", "human-in-the-loop", "telegram"],
+  "license": "MIT",
+  "dependencies": {
+    "croo-core": "file:../dorahacks-croo-core"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0",
+    "eslint": "^9.0.0"
+  }
+}
