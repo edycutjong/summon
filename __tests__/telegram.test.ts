@@ -5,6 +5,7 @@ import {
   stopCallbackPolling,
   cancelPendingApproval,
   getPendingCount,
+  clearPendingApprovals,
 } from '../src/telegram.js';
 
 describe('Telegram Bridge', () => {
@@ -77,7 +78,7 @@ describe('Telegram Bridge', () => {
         text: async () => 'Bad Request',
       } as Response);
 
-      await expect(sendApprovalPrompt('order_2', 'prompt')).rejects.toThrow('Telegram sendMessage failed: 400 Bad Request');
+      await expect(sendApprovalPrompt('order_2', 'prompt')).rejects.toThrow('Telegram API failed: 400 Bad Request');
     });
 
     it('adds pending approval to map', async () => {
@@ -91,6 +92,27 @@ describe('Telegram Bridge', () => {
       expect(getPendingCount()).toBe(1);
       cancelPendingApproval('order_3');
       expect(getPendingCount()).toBe(0);
+    });
+
+    it('truncates very long prompts when imageUrl is provided', async () => {
+      const fetchMock = vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        text: async () => 'ok',
+      } as Response);
+
+      const longPrompt = 'A'.repeat(1000);
+      const _promise = sendApprovalPrompt('order_long', longPrompt, 'http://image.url').catch(() => {});
+      
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [_url, options] = fetchMock.mock.calls[0];
+      
+      const body = JSON.parse(options?.body as string);
+      expect(body.caption).toContain('... [truncated]');
+      expect(body.caption.length).toBeLessThan(1000);
+      expect(body.photo).toBe('http://image.url');
+
+      await new Promise(r => setTimeout(r, 10));
+      cancelPendingApproval('order_long');
     });
   });
 
@@ -135,15 +157,60 @@ describe('Telegram Bridge', () => {
 
       startCallbackPolling();
       
-      // Wait for the first poll
+      // Start again while active, should return early
+      const secondPoll = startCallbackPolling();
+      expect(secondPoll).toBeInstanceOf(Promise); // Resolves immediately
+
       await new Promise(r => setTimeout(r, 20));
 
       expect(fetchMock).toHaveBeenCalled();
     });
 
-    it('resolves pending approval via callback query', async () => {
+    it('ignores updates without callback_query data or missing orderId', async () => {
       vi.mocked(fetch)
-        .mockResolvedValueOnce({ ok: true } as Response) // sendMessage
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            ok: true,
+            result: [
+              { update_id: 104 }, // No callback_query
+              { update_id: 105, callback_query: { id: 'c1' } }, // No data/from
+              { update_id: 106, callback_query: { id: 'c2', data: 'approve:', from: { id: 'test_chat' } } } // Missing orderId
+            ]
+          })
+        } as Response)
+        .mockImplementation(async () => {
+          stopCallbackPolling();
+          return { ok: true, json: async () => ({ ok: true, result: [] }) } as Response;
+        });
+
+      startCallbackPolling();
+      await new Promise(r => setTimeout(r, 20));
+      // Handled silently, no errors thrown
+    });
+
+    it('ignores TimeoutError from getUpdates gracefully', async () => {
+      let callCount = 0;
+      vi.mocked(fetch).mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          const err = new Error('Timeout');
+          err.name = 'TimeoutError';
+          throw err;
+        }
+        stopCallbackPolling();
+        return { ok: true, json: async () => ({ ok: true, result: [] }) } as Response;
+      });
+
+      startCallbackPolling();
+      await new Promise(r => setTimeout(r, 20));
+      expect(callCount).toBeGreaterThan(0);
+    });
+
+    it('resolves pending approval via callback query (with and without username)', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({ ok: true } as Response) // sendMessage 1
+        .mockResolvedValueOnce({ ok: true } as Response) // sendMessage 2
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({
@@ -156,6 +223,14 @@ describe('Telegram Bridge', () => {
                   data: 'reject:poll_order_2',
                   from: { id: 'test_chat', username: 'operator' }
                 }
+              },
+              {
+                update_id: 102,
+                callback_query: {
+                  id: 'cq3',
+                  data: 'approve:poll_order_3',
+                  from: { id: 'test_chat' } // No username
+                }
               }
             ]
           })
@@ -165,15 +240,17 @@ describe('Telegram Bridge', () => {
           return { ok: true, json: async () => ({ ok: true, result: [] }) } as Response;
         }); // answerCallbackQuery / future polls
 
-      const _promise = sendApprovalPrompt('poll_order_2', 'prompt');
+      const p1 = sendApprovalPrompt('poll_order_2', 'prompt');
+      const p2 = sendApprovalPrompt('poll_order_3', 'prompt');
       await new Promise(r => setTimeout(r, 10));
       
       startCallbackPolling();
       
-      // The pending approval should be resolved with approved: false by the callback query
-      const result = await _promise;
-      expect(result.approved).toBe(false);
-      expect(result.by).toBe('telegram:test_chat');
+      const result1 = await p1;
+      expect(result1.approved).toBe(false);
+      
+      const result2 = await p2;
+      expect(result2.approved).toBe(true);
     });
 
     it('handles getUpdates failing (status !ok) by sleeping and continuing', async () => {
@@ -220,6 +297,98 @@ describe('Telegram Bridge', () => {
       
       vi.useRealTimers();
       expect(callCount).toBeGreaterThan(0);
+    });
+
+    it('ignores unauthorized approval attempts', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({ ok: true } as Response) // sendMessage
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            ok: true,
+            result: [
+              {
+                update_id: 102,
+                callback_query: {
+                  id: 'cq_unauth',
+                  data: 'approve:poll_order_unauth',
+                  from: { id: 999999, username: 'hacker' }
+                }
+              }
+            ]
+          })
+        } as Response) // getUpdates
+        .mockImplementation(async () => {
+          stopCallbackPolling();
+          return { ok: true, json: async () => ({ ok: true, result: [] }) } as Response;
+        });
+
+      sendApprovalPrompt('poll_order_unauth', 'prompt').catch(() => {});
+      await new Promise(r => setTimeout(r, 10));
+      
+      startCallbackPolling();
+      
+      // Wait to ensure poll finishes
+      await new Promise(r => setTimeout(r, 50));
+      
+      // The pending approval should still be there because the unauthorized user was ignored
+      expect(getPendingCount()).toBe(1);
+      cancelPendingApproval('poll_order_unauth');
+    });
+
+    it('handles answerCallbackQuery fetch failures gracefully', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({ ok: true } as Response) // sendMessage
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            ok: true,
+            result: [
+              {
+                update_id: 103,
+                callback_query: {
+                  id: 'cq_fail',
+                  data: 'approve:poll_order_answer_fail',
+                  from: { id: 'test_chat', username: 'operator' }
+                }
+              }
+            ]
+          })
+        } as Response) // getUpdates
+        .mockImplementation(async (url) => {
+          if (url.toString().includes('answerCallbackQuery')) {
+            return Promise.reject(new Error('answerCallbackQuery failed'));
+          }
+          stopCallbackPolling();
+          return { ok: true, json: async () => ({ ok: true, result: [] }) } as Response;
+        });
+
+      const _promise = sendApprovalPrompt('poll_order_answer_fail', 'prompt');
+      await new Promise(r => setTimeout(r, 10));
+      
+      startCallbackPolling();
+      
+      // The pending approval should still resolve despite the answerCallbackQuery failing
+      const result = await _promise;
+      expect(result.approved).toBe(true);
+    });
+  });
+
+  describe('clearPendingApprovals', () => {
+    it('clears all pending approvals and rejects them with TEARDOWN', async () => {
+      vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+      
+      const p1 = sendApprovalPrompt('order_clear_1', 'prompt');
+      const p2 = sendApprovalPrompt('order_clear_2', 'prompt');
+      
+      await new Promise(r => setTimeout(r, 10));
+      expect(getPendingCount()).toBe(2);
+      
+      clearPendingApprovals();
+      
+      expect(getPendingCount()).toBe(0);
+      await expect(p1).rejects.toThrow('TEARDOWN');
+      await expect(p2).rejects.toThrow('TEARDOWN');
     });
   });
 });

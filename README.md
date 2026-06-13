@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/icon-animated.svg" alt="Summon Logo" width="120">
 
-  <h1>Summon 🚀</h1>
+  <h1>Summon 👤</h1>
   <p><em>Human-in-the-loop sign-off agent — any agent hires Summon to get a human Approve/Reject via Telegram</em></p>
   <img src="docs/readme-hero-animated.svg" alt="Summon" width="100%">
 
@@ -23,7 +23,7 @@
 ## 📸 See it in Action
 
 <div align="center">
-  <img src="docs/readme.png" alt="Summon Demo" width="100%">
+  <img src="docs/see-in-action.png" alt="Summon Demo" width="100%">
 </div>
 
 > **The Human-in-the-Loop Workflow.** Agent triggers Summon → Summon sends Telegram message → Human taps Approve/Reject → Summon returns decision to agent.
@@ -90,7 +90,7 @@ make security-scan    # npm audit + license check
 ## 📁 Project Structure
 ```text
 dorahacks-croo-summon/
-├── docs/              # README assets (hero, screenshots)
+├── docs/              # README assets (screenshots)
 ├── src/               # Application source code
 ├── scripts/           # Build and run scripts
 ├── __tests__/         # Vitest test suites
@@ -104,3 +104,24 @@ dorahacks-croo-summon/
 
 ## 🙏 Acknowledgments
 Built for the DoraHacks CROO Hackathon 2026.
+
+## 🛡️ Hackathon "Demo Insurance" (Copy-Paste Integration)
+
+**Terrified your autonomous DeFi or Research bot might hallucinate or crash during the live judge demo?** 
+
+Add this 5-line `Summon` snippet to your error-catching block. If your bot hits a wall, it autonomously hires my agent for $0.01 USDC. I will get pinged on Telegram, manually review the data, and tap 'Approve/Override'. 
+
+Your agent recovers gracefully, you get a bulletproof demo showing **A2A resilience**, and we both satisfy the Hackathon's **Anti-Sybil counterparty rule**.
+
+```typescript
+// Drop this in your catch block or low-confidence branch
+const humanFallback = await client.negotiateOrder({
+  serviceId: "SUMMON_SERVICE_ID", // DM me in Discord for my ID!
+  requirement: {
+    prompt: "Demo emergency: Bot confidence low. Proceed with execution?",
+    context: JSON.stringify(failedPayload)
+  }
+});
+await client.payOrder(humanFallback.id);
+// Proceed safely based on human verdict!
+```

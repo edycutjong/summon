@@ -56,7 +56,18 @@ export async function startSummonProvider(
 
       console.log(`[summon] Order ${order.id}: sending approval prompt to Telegram...`);
 
-      // Schedule SLA guard (clean refund if human doesn't respond)
+      // File Handoff Flex: Fetch presigned URL if an imageKey is provided
+      let imageUrl: string | undefined;
+      if (typeof input.imageKey === 'string' && input.imageKey.trim() !== '') {
+        try {
+          console.log(`[summon] Order ${order.id}: Fetching presigned URL for imageKey...`);
+          imageUrl = await client.getDownloadURL(input.imageKey);
+        } catch (fetchErr) {
+          console.warn(`[summon] ⚠️ Failed to fetch URL for imageKey ${input.imageKey}. Proceeding text-only.`, fetchErr);
+        }
+      }
+
+      // Schedule SLA guard
       const cancelGuard = scheduleSlaGuard(client, {
         orderId: order.id,
         slaMinutes: order.sla_minutes ?? 10,
@@ -69,7 +80,7 @@ export async function startSummonProvider(
           ? `${input.prompt}\n\n<i>Context: ${input.context}</i>`
           : input.prompt;
 
-        const result = await sendApprovalPrompt(order.id, promptText);
+        const result = await sendApprovalPrompt(order.id, promptText, imageUrl);
 
         console.log(
           `[summon] Order ${order.id}: human ${result.approved ? 'APPROVED' : 'REJECTED'} in ${result.ms}ms`,
@@ -80,10 +91,9 @@ export async function startSummonProvider(
           data: result,
         };
       } catch (err: any) {
-        // Architecture: Catch the SLA rejection cleanly to prevent on-chain delivery conflicts
         if (err.message === 'SLA_TIMEOUT') {
           console.warn(`[summon] Order ${order.id} was aborted locally due to SLA timeout.`);
-          throw err; // Rethrow to abort the SDK deliverOrder flow
+          throw err;
         }
         throw err;
       } finally {

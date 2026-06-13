@@ -1,4 +1,4 @@
-.PHONY: help install dev build start test test-watch test-coverage lint lint-fix typecheck security-scan ci
+.PHONY: help setup dev build start test test-watch test-coverage lint lint-fix typecheck security-scan ci
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -6,7 +6,7 @@ help: ## Show this help message
 	@echo 'Targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-install: ## Install dependencies
+setup: ## Install dependencies
 	npm install
 
 dev: ## Run development server with watch mode

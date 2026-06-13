@@ -39,6 +39,12 @@ describe('Summon Provider', () => {
     
     // Should accept if amount is >= 5.0 even in off-hours
     expect(handlers.serviceMatch({ service_id: 'test_service', amount_offered: '5.0', negotiation_id: 'n2' } as any)).toBe(true);
+
+    // Should use event.amount if amount_offered is missing
+    expect(handlers.serviceMatch({ service_id: 'test_service', amount: '2.0', negotiation_id: 'n3' } as any)).toBe(false);
+    
+    // Should default to '0' if both are missing
+    expect(handlers.serviceMatch({ service_id: 'test_service', negotiation_id: 'n4' } as any)).toBe(false);
     
     vi.useRealTimers();
   });
@@ -66,7 +72,7 @@ describe('Summon Provider', () => {
       requirement: { prompt: 'Do it?', context: 'Just testing' },
     } as any);
 
-    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o2', 'Do it?\n\n<i>Context: Just testing</i>');
+    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o2', 'Do it?\n\n<i>Context: Just testing</i>', undefined);
     
     expect(result.type).toBe('schema');
     expect(result.data.approved).toBe(true);
@@ -87,7 +93,70 @@ describe('Summon Provider', () => {
       requirement: { prompt: 'Just a prompt' },
     } as any);
 
-    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o3', 'Just a prompt');
+    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o3', 'Just a prompt', undefined);
     expect(result.data.approved).toBe(false);
+  });
+
+  it('fetches presigned URL if imageKey is provided', async () => {
+    const client = {
+      getDownloadURL: vi.fn().mockResolvedValue('https://example.com/image.jpg'),
+    };
+    const handlers: any = await startSummonProvider(client, 'test_service');
+    
+    vi.mocked(telegram.sendApprovalPrompt).mockResolvedValueOnce({
+      approved: true,
+      by: 'telegram:test',
+      ms: 100,
+    });
+
+    await handlers.work({
+      id: 'o4',
+      requirement: { prompt: 'Check this image', imageKey: 'img123' },
+    } as any);
+
+    expect(client.getDownloadURL).toHaveBeenCalledWith('img123');
+    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o4', 'Check this image', 'https://example.com/image.jpg');
+  });
+
+  it('proceeds text-only if getDownloadURL throws', async () => {
+    const client = {
+      getDownloadURL: vi.fn().mockRejectedValue(new Error('S3 error')),
+    };
+    const handlers: any = await startSummonProvider(client, 'test_service');
+    
+    vi.mocked(telegram.sendApprovalPrompt).mockResolvedValueOnce({
+      approved: true,
+      by: 'telegram:test',
+      ms: 100,
+    });
+
+    await handlers.work({
+      id: 'o5',
+      requirement: { prompt: 'Check this image', imageKey: 'img123' },
+    } as any);
+
+    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o5', 'Check this image', undefined);
+  });
+
+  it('catches SLA_TIMEOUT and rethrows it', async () => {
+    const handlers: any = await startSummonProvider({}, 'test_service');
+    
+    vi.mocked(telegram.sendApprovalPrompt).mockRejectedValueOnce(new Error('SLA_TIMEOUT'));
+
+    await expect(handlers.work({
+      id: 'o6',
+      requirement: { prompt: 'Will timeout' },
+    } as any)).rejects.toThrow('SLA_TIMEOUT');
+  });
+
+  it('catches generic errors and rethrows them', async () => {
+    const handlers: any = await startSummonProvider({}, 'test_service');
+    
+    vi.mocked(telegram.sendApprovalPrompt).mockRejectedValueOnce(new Error('Generic Error'));
+
+    await expect(handlers.work({
+      id: 'o7',
+      requirement: { prompt: 'Will error' },
+    } as any)).rejects.toThrow('Generic Error');
   });
 });

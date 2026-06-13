@@ -15,10 +15,7 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** Inline keyboard markup for Approve/Reject buttons. */
-interface InlineKeyboard {
-  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
-}
+
 
 /** Pending approval waiting for human tap. */
 interface PendingApproval {
@@ -55,16 +52,18 @@ function getChatId(): string {
  *
  * @param orderId - The CROO order ID (used as callback_data prefix)
  * @param prompt - The human-readable prompt text
+ * @param imageUrl - Optional presigned URL for an image
  * @returns Promise that resolves when the human taps a button
  */
 export async function sendApprovalPrompt(
   orderId: string,
   prompt: string,
+  imageUrl?: string,
 ): Promise<{ approved: boolean; by: string; ms: number }> {
   const token = getBotToken();
   const chatId = getChatId();
 
-  const keyboard: InlineKeyboard = {
+  const keyboard = {
     inline_keyboard: [
       [
         { text: '✅ Approve', callback_data: `approve:${orderId}` },
@@ -73,30 +72,48 @@ export async function sendApprovalPrompt(
     ],
   };
 
-  const safePrompt = escapeHtml(prompt);
-  const message = `🔔 <b>Agent Sign-Off Request</b>\n\nOrder: <code>${orderId}</code>\n\n${safePrompt}`;
+  // Architecture: Telegram restricts media captions to 1024 characters.
+  // We truncate safely before HTML escaping to avoid cutting tags in half.
+  const maxLength = 800; 
+  let finalPrompt = prompt;
+  if (imageUrl && prompt.length > maxLength) {
+    finalPrompt = prompt.substring(0, maxLength) + '... [truncated]';
+  }
+
+  const safePrompt = escapeHtml(finalPrompt);
+  const textPayload = `🔔 <b>Agent Sign-Off Request</b>\n\nOrder: <code>${orderId}</code>\n\n${safePrompt}`;
+
+  // Dynamically switch between text and photo endpoints
+  const endpoint = imageUrl ? 'sendPhoto' : 'sendMessage';
+
+  const bodyPayload: any = {
+    chat_id: chatId,
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  };
+
+  if (imageUrl) {
+    bodyPayload.photo = imageUrl;
+    bodyPayload.caption = textPayload;
+  } else {
+    bodyPayload.text = textPayload;
+  }
 
   const response = await fetch(
-    `https://api.telegram.org/bot${token}/sendMessage`,
+    `https://api.telegram.org/bot${token}/${endpoint}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: message,
-        parse_mode: 'HTML',
-        reply_markup: keyboard,
-      }),
-      signal: AbortSignal.timeout(15000), // Prevent sending hangs
-    },
+      body: JSON.stringify(bodyPayload),
+      signal: AbortSignal.timeout(15000), 
+    }
   );
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Telegram sendMessage failed: ${response.status} ${body}`);
+    throw new Error(`Telegram API failed: ${response.status} ${body}`);
   }
 
-  // Wait for the human's tap
   const sentAt = Date.now();
 
   return new Promise<{ approved: boolean; by: string; ms: number }>((resolve, reject) => {
