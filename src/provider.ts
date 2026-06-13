@@ -7,8 +7,8 @@
  * Scope: Approve/Reject ONLY (image and answer modes were cut).
  */
 
-import { runProvider } from 'croo-core';
-import type { Order, Deliverable, NegotiationEvent } from 'croo-core';
+import { runProvider } from '@edycutjong/croo-core';
+import type { Order, Deliverable, Negotiation } from '@edycutjong/croo-core';
 import { sendApprovalPrompt } from './telegram.js';
 import { scheduleSlaGuard } from './sla-guard.js';
 
@@ -42,14 +42,29 @@ export async function startSummonProvider(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   client: any,
   serviceId: string,
-) {
-  return runProvider<SummonInput, SummonOutput>(client, {
-    serviceMatch: (event: NegotiationEvent) => {
-      return event.service_id === serviceId;
+): Promise<any> {
+  return runProvider<any>(client, {
+    serviceMatch: (event: any) => {
+      if (event.service_id !== serviceId) return false;
+
+      // Surge Pricing Logic
+      const hour = new Date().getUTCHours();
+      // US Business hours: roughly 13:00 to 22:00 UTC (9am - 6pm EST)
+      const isUSBusinessHours = hour >= 13 && hour <= 22;
+      const offerUsdc = parseFloat((event.amount_offered || event.amount || '0') as string);
+
+      if (!isUSBusinessHours && offerUsdc < 5.0) {
+        console.warn(
+          `[summon] ⚠️ Protocol Flex: Rejecting SLA for ${event.negotiation_id} — Off-hours surge pricing active. Minimum 5.0 USDC required, offered ${offerUsdc}.`
+        );
+        return false;
+      }
+
+      return true;
     },
 
-    work: async (order: Order<SummonInput>): Promise<Deliverable<SummonOutput>> => {
-      const input = order.requirement;
+    work: async (order: any): Promise<Deliverable<any>> => {
+      const input = order.requirement as unknown as SummonInput;
       if (!input?.prompt) {
         throw new Error('Missing required field: prompt');
       }

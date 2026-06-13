@@ -46,7 +46,7 @@ export function scheduleSlaGuard(
   );
 
   const timer = setTimeout(async () => {
-    console.warn(`[summon/sla] SLA guard firing for order ${orderId}`);
+    console.warn(`[summon/sla] ⚠️ Protocol Flex: SLA guard firing for order ${orderId} — Triggering clean refund via rejectOrder before Base Mainnet escrow expiry.`);
 
     // Cancel the pending Telegram approval
     cancelPendingApproval(orderId);

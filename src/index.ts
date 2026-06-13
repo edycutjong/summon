@@ -13,7 +13,7 @@
  * - CROO_MOCK=true — offline mock mode (no USDC spent)
  */
 
-import { makeClient, isMockMode } from 'croo-core';
+import { makeClient, isMockMode } from '@edycutjong/croo-core';
 import { startSummonProvider } from './provider.js';
 import { startCallbackPolling } from './telegram.js';
 
