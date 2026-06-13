@@ -9,7 +9,6 @@
 
 import { cancelPendingApproval } from './telegram.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AgentClient = any;
 
 interface SlaGuardOptions {
@@ -54,7 +53,7 @@ export function scheduleSlaGuard(
     try {
       await client.rejectOrder(orderId, 'SLA guard: human did not respond in time — clean refund');
       console.log(`[summon/sla] Order ${orderId} rejected (clean refund to buyer)`);
-    } catch (_err) {
+    } catch {
       // Order may have already been delivered — safe to ignore
       console.log(`[summon/sla] Order ${orderId} already resolved, guard no-op`);
     }

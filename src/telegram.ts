@@ -10,6 +10,11 @@
  * - TELEGRAM_CHAT_ID — the approver's chat ID
  */
 
+// 1. Add HTML escape utility at the top
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 /** Inline keyboard markup for Approve/Reject buttons. */
 interface InlineKeyboard {
   inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
@@ -19,6 +24,7 @@ interface InlineKeyboard {
 interface PendingApproval {
   orderId: string;
   resolve: (approved: boolean) => void;
+  reject: (error: Error) => void;
   sentAt: number;
 }
 
@@ -67,7 +73,8 @@ export async function sendApprovalPrompt(
     ],
   };
 
-  const message = `🔔 *Agent Sign-Off Request*\n\nOrder: \`${orderId}\`\n\n${prompt}`;
+  const safePrompt = escapeHtml(prompt);
+  const message = `🔔 <b>Agent Sign-Off Request</b>\n\nOrder: <code>${orderId}</code>\n\n${safePrompt}`;
 
   const response = await fetch(
     `https://api.telegram.org/bot${token}/sendMessage`,
@@ -77,9 +84,10 @@ export async function sendApprovalPrompt(
       body: JSON.stringify({
         chat_id: chatId,
         text: message,
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
         reply_markup: keyboard,
       }),
+      signal: AbortSignal.timeout(15000), // Prevent sending hangs
     },
   );
 
@@ -91,14 +99,19 @@ export async function sendApprovalPrompt(
   // Wait for the human's tap
   const sentAt = Date.now();
 
-  return new Promise<{ approved: boolean; by: string; ms: number }>((resolve) => {
-    pendingApprovals.set(orderId, { orderId, resolve: (approved) => {
-      resolve({
-        approved,
-        by: `telegram:${chatId}`,
-        ms: Date.now() - sentAt,
-      });
-    }, sentAt });
+  return new Promise<{ approved: boolean; by: string; ms: number }>((resolve, reject) => {
+    pendingApprovals.set(orderId, { 
+      orderId, 
+      resolve: (approved) => {
+        resolve({
+          approved,
+          by: `telegram:${chatId}`,
+          ms: Date.now() - sentAt,
+        });
+      }, 
+      reject,
+      sentAt 
+    });
   });
 }
 
@@ -112,13 +125,16 @@ export async function startCallbackPolling(): Promise<void> {
   if (pollingActive) return;
   pollingActive = true;
   const token = getBotToken();
+  const allowedChatId = getChatId();
 
   console.log('[summon/telegram] Starting callback polling...');
 
   while (pollingActive) {
     try {
+      // Prevent unbounded socket hangs
       const response = await fetch(
         `https://api.telegram.org/bot${token}/getUpdates?offset=${lastUpdateId + 1}&timeout=30&allowed_updates=["callback_query"]`,
+        { signal: AbortSignal.timeout(35000) }
       );
 
       if (!response.ok) {
@@ -134,7 +150,7 @@ export async function startCallbackPolling(): Promise<void> {
           callback_query?: {
             id: string;
             data?: string;
-            from?: { username?: string };
+            from?: { id: number; username?: string };
           };
         }>;
       };
@@ -143,36 +159,46 @@ export async function startCallbackPolling(): Promise<void> {
         lastUpdateId = update.update_id;
 
         const callback = update.callback_query;
-        if (!callback?.data) continue;
+        if (!callback?.data || !callback?.from?.id) continue;
 
-        const [action, orderId] = callback.data.split(':');
+        // Security: Validate the user ID matches the configured approver
+        if (callback.from.id.toString() !== allowedChatId) {
+          console.warn(`[summon/telegram] ⚠️ Unauthorized approval attempt from user ${callback.from.id}`);
+          continue;
+        }
+
+        const [action, ...orderIdParts] = callback.data.split(':');
+        const orderId = orderIdParts.join(':');
         if (!orderId) continue;
 
         const pending = pendingApprovals.get(orderId);
-        if (!pending) continue;
-
         const approved = action === 'approve';
-        pending.resolve(approved);
-        pendingApprovals.delete(orderId);
 
-        // Answer the callback query (removes the loading spinner)
-        await fetch(
-          `https://api.telegram.org/bot${token}/answerCallbackQuery`,
-          {
+        // Performance & UX: Fire and forget the answerCallbackQuery to avoid blocking the event loop
+        // Also do this BEFORE `if (!pending) continue;` to clear stale spinners
+        fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               callback_query_id: callback.id,
-              text: approved ? '✅ Approved!' : '❌ Rejected.',
+              text: pending ? (approved ? '✅ Approved!' : '❌ Rejected.') : '⚠️ Expired or already answered.',
+              show_alert: !pending
             }),
-          },
-        );
+            signal: AbortSignal.timeout(5000),
+        }).catch(err => console.error('[summon/telegram] Failed to answer callback query:', err));
 
+        if (!pending) continue;
+
+        pending.resolve(approved);
+        pendingApprovals.delete(orderId);
+        
         console.log(`[summon/telegram] Order ${orderId}: ${approved ? 'APPROVED' : 'REJECTED'} by ${callback.from?.username ?? 'unknown'}`);
       }
-    } catch (err) {
-      console.error('[summon/telegram] Polling error:', err);
-      await sleep(5000);
+    } catch (err: any) {
+      if (err.name !== 'TimeoutError') {
+        console.error('[summon/telegram] Polling error:', err);
+        await sleep(5000);
+      }
     }
   }
 }
@@ -190,11 +216,19 @@ export function stopCallbackPolling(): void {
 export function cancelPendingApproval(orderId: string): boolean {
   const pending = pendingApprovals.get(orderId);
   if (pending) {
-    pending.resolve(false); // Treat as rejected
+    pending.reject(new Error('SLA_TIMEOUT'));
     pendingApprovals.delete(orderId);
     return true;
   }
   return false;
+}
+
+// 6. Export clearPendingApprovals for Testing to avoid global state mock leaks
+export function clearPendingApprovals(): void {
+  for (const pending of pendingApprovals.values()) {
+    pending.reject(new Error('TEARDOWN'));
+  }
+  pendingApprovals.clear();
 }
 
 /**

@@ -48,7 +48,7 @@ describe('Telegram Bridge', () => {
       } as Response);
 
       // We don't await because it blocks waiting for user input
-      const promise = sendApprovalPrompt('order_1', 'Hello');
+      const _promise = sendApprovalPrompt('order_1', 'Hello').catch(() => {});
       
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [url, options] = fetchMock.mock.calls[0];
@@ -83,7 +83,7 @@ describe('Telegram Bridge', () => {
     it('adds pending approval to map', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({ ok: true } as Response);
       
-      sendApprovalPrompt('order_3', 'prompt');
+      sendApprovalPrompt('order_3', 'prompt').catch(() => {});
       
       // Allow promise to tick
       await new Promise(r => setTimeout(r, 10));
@@ -102,14 +102,12 @@ describe('Telegram Bridge', () => {
     it('returns true and resolves with false if order found', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({ ok: true } as Response);
       
-      const promise = sendApprovalPrompt('order_cancel', 'prompt');
+      const _promise = sendApprovalPrompt('order_cancel', 'prompt');
       await new Promise(r => setTimeout(r, 10));
       
       expect(cancelPendingApproval('order_cancel')).toBe(true);
       
-      const result = await promise;
-      expect(result.approved).toBe(false); // Cancelled = rejected
-      expect(result.by).toBe('telegram:test_chat');
+      await expect(_promise).rejects.toThrow('SLA_TIMEOUT');
     });
   describe('Polling', () => {
     it('starts polling and handles updates', async () => {
@@ -124,7 +122,7 @@ describe('Telegram Bridge', () => {
               callback_query: {
                 id: 'cq1',
                 data: 'approve:poll_order',
-                from: { username: 'testuser' }
+                from: { id: 'test_chat', username: 'testuser' }
               }
             }
           ]
@@ -156,7 +154,7 @@ describe('Telegram Bridge', () => {
                 callback_query: {
                   id: 'cq2',
                   data: 'reject:poll_order_2',
-                  from: { username: 'operator' }
+                  from: { id: 'test_chat', username: 'operator' }
                 }
               }
             ]
@@ -167,13 +165,13 @@ describe('Telegram Bridge', () => {
           return { ok: true, json: async () => ({ ok: true, result: [] }) } as Response;
         }); // answerCallbackQuery / future polls
 
-      const promise = sendApprovalPrompt('poll_order_2', 'prompt');
+      const _promise = sendApprovalPrompt('poll_order_2', 'prompt');
       await new Promise(r => setTimeout(r, 10));
       
       startCallbackPolling();
       
       // The pending approval should be resolved with approved: false by the callback query
-      const result = await promise;
+      const result = await _promise;
       expect(result.approved).toBe(false);
       expect(result.by).toBe('telegram:test_chat');
     });

@@ -49,7 +49,7 @@ describe('Summon Provider', () => {
     await expect(handlers.work({
       id: 'o1',
       requirement: {},
-    } as any)).rejects.toThrow('Missing required field: prompt');
+    } as any)).rejects.toThrow('Invalid requirement: "prompt" must be a valid string');
   });
 
   it('calls sendApprovalPrompt and returns deliverable', async () => {
@@ -66,7 +66,7 @@ describe('Summon Provider', () => {
       requirement: { prompt: 'Do it?', context: 'Just testing' },
     } as any);
 
-    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o2', 'Do it?\n\n_Context: Just testing_');
+    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o2', 'Do it?\n\n<i>Context: Just testing</i>');
     
     expect(result.type).toBe('schema');
     expect(result.data.approved).toBe(true);
