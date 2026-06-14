@@ -29,7 +29,7 @@
     "@edycutjong/croo-core": "^0.3.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^25.9.3",
     "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^9.0.0",
     "license-checker": "^25.0.1",
