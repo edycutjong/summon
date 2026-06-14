@@ -31,7 +31,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^4.1.8",
-    "eslint": "^9.0.0",
+    "eslint": "^10.5.0",
     "license-checker": "^25.0.1",
     "tsx": "^4.0.0",
     "typescript": "^5.8.0",
