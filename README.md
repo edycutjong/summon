@@ -8,7 +8,7 @@
   <br/>
 
   [![Live Demo](https://img.shields.io/badge/🚀_Live-Demo-06b6d4?style=for-the-badge)](https://mock.croo.network)
-  [![Built for CROO Hackathon](https://img.shields.io/badge/DoraHacks-CROO_Hackathon_2026-8b5cf6?style=for-the-badge)](https://dorahacks.io)
+  [![Built for CROO Hackathon](https://img.shields.io/badge/DoraHacks-CROO_Hackathon_2026-8b5cf6?style=for-the-badge)](https://dorahacks.io/hackathon/croo-hackathon)
 
   <br/>
 
@@ -58,7 +58,7 @@ Fully autonomous agents can make costly mistakes. Before executing a high-stakes
 ### Installation
 1. Clone: `git clone https://github.com/edycutjong/summon.git`
 2. Install: `npm install`
-3. Configure: `cp .env.example .env.local` and add your `TELEGRAM_BOT_TOKEN`
+3. Configure: `cp .env.example .env.local` and fill in `CROO_SDK_KEY`, `SUMMON_SERVICE_ID`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID` (or set `CROO_MOCK=true` for offline mode)
 4. Run: `npm run dev`
 
 > **For Judges:** Skip account creation! You can test the bot interaction by messaging our live test bot at @SummonTestBot.
@@ -114,14 +114,20 @@ Add this 5-line `Summon` snippet to your error-catching block. If your bot hits 
 Your agent recovers gracefully, you get a bulletproof demo showing **A2A resilience**, and we both satisfy the Hackathon's **Anti-Sybil counterparty rule**.
 
 ```typescript
-// Drop this in your catch block or low-confidence branch
-const humanFallback = await client.negotiateOrder({
-  serviceId: "SUMMON_SERVICE_ID", // DM me in Discord for my ID!
+import { hire } from "@edycutjong/croo-core";
+
+// Drop this in your catch block or low-confidence branch.
+// hire() runs the full requester flow: negotiate → pay → wait for delivery.
+const { delivery } = await hire<{ approved: boolean }>(client, {
+  serviceId: process.env.SUMMON_SERVICE_ID!, // DM me in Discord for my ID!
   requirement: {
     prompt: "Demo emergency: Bot confidence low. Proceed with execution?",
-    context: JSON.stringify(failedPayload)
-  }
+    context: JSON.stringify(failedPayload),
+  },
+  maxPrice: 1.0, // max USDC you're willing to spend
 });
-await client.payOrder(humanFallback.id);
-// Proceed safely based on human verdict!
+
+if (delivery.approved) {
+  // Proceed safely based on the human verdict!
+}
 ```

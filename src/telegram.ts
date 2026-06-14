@@ -7,20 +7,41 @@
  *
  * Required env vars:
  * - TELEGRAM_BOT_TOKEN — from @BotFather
- * - TELEGRAM_CHAT_ID — the approver's chat ID
+ * - TELEGRAM_CHAT_ID — the chat the prompt is sent to
+ *
+ * Optional:
+ * - TELEGRAM_ALLOWED_USER_IDS — comma-separated Telegram *user* IDs allowed to
+ *   approve/reject. Defaults to TELEGRAM_CHAT_ID (correct for a 1:1 DM, where
+ *   the chat ID equals the user ID). Set this explicitly for group chats.
  */
 
-// 1. Add HTML escape utility at the top
+/** Escape user-supplied text for Telegram's HTML parse mode. */
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Telegram length limits (UTF-16 code units, matched closely enough by .length).
+const TG_TEXT_LIMIT = 4096;
+const TG_CAPTION_LIMIT = 1024;
+const TRUNCATION_SUFFIX = '... [truncated]';
 
+/**
+ * Truncate already-escaped HTML to `max` units without cutting an HTML entity
+ * (e.g. `&lt;`) in half, appending a truncation marker when shortened.
+ */
+function truncateEscaped(escaped: string, max: number): string {
+  if (escaped.length <= max) return escaped;
+  const sliced = escaped
+    .slice(0, Math.max(0, max - TRUNCATION_SUFFIX.length))
+    // Drop a dangling partial entity (`&...` with no closing `;`).
+    .replace(/&[^;]*$/, '');
+  return sliced + TRUNCATION_SUFFIX;
+}
 
 /** Pending approval waiting for human tap. */
 interface PendingApproval {
   orderId: string;
-  resolve: (approved: boolean) => void;
+  resolve: (approved: boolean, by: string) => void;
   reject: (error: Error) => void;
   sentAt: number;
 }
@@ -43,6 +64,19 @@ function getChatId(): string {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!chatId) throw new Error('Missing TELEGRAM_CHAT_ID env var');
   return chatId;
+}
+
+/**
+ * The set of Telegram *user* IDs allowed to approve/reject. Uses
+ * TELEGRAM_ALLOWED_USER_IDS when set, otherwise falls back to TELEGRAM_CHAT_ID
+ * (valid only for a 1:1 DM, where chat ID == user ID).
+ */
+function getAllowedUserIds(): Set<string> {
+  const explicit = process.env.TELEGRAM_ALLOWED_USER_IDS;
+  if (explicit && explicit.trim() !== '') {
+    return new Set(explicit.split(',').map((id) => id.trim()).filter(Boolean));
+  }
+  return new Set([getChatId()]);
 }
 
 // ─── Send Message ──────────────────────────────────────────────────
@@ -72,18 +106,14 @@ export async function sendApprovalPrompt(
     ],
   };
 
-  // Architecture: Telegram restricts media captions to 1024 characters.
-  // We truncate safely before HTML escaping to avoid cutting tags in half.
-  const maxLength = 800; 
-  let finalPrompt = prompt;
-  if (imageUrl && prompt.length > maxLength) {
-    finalPrompt = prompt.substring(0, maxLength) + '... [truncated]';
-  }
+  // Build the header first, then fit the (escaped) prompt into the remaining
+  // budget. Photo captions are capped at 1024 chars, text messages at 4096.
+  const header = `🔔 <b>Agent Sign-Off Request</b>\n\nOrder: <code>${escapeHtml(orderId)}</code>\n\n`;
+  const limit = imageUrl ? TG_CAPTION_LIMIT : TG_TEXT_LIMIT;
+  const safePrompt = truncateEscaped(escapeHtml(prompt), Math.max(0, limit - header.length));
+  const textPayload = header + safePrompt;
 
-  const safePrompt = escapeHtml(finalPrompt);
-  const textPayload = `🔔 <b>Agent Sign-Off Request</b>\n\nOrder: <code>${orderId}</code>\n\n${safePrompt}`;
-
-  // Dynamically switch between text and photo endpoints
+  // Dynamically switch between text and photo endpoints.
   const endpoint = imageUrl ? 'sendPhoto' : 'sendMessage';
 
   const bodyPayload: any = {
@@ -105,7 +135,7 @@ export async function sendApprovalPrompt(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(bodyPayload),
-      signal: AbortSignal.timeout(15000), 
+      signal: AbortSignal.timeout(15000),
     }
   );
 
@@ -117,17 +147,17 @@ export async function sendApprovalPrompt(
   const sentAt = Date.now();
 
   return new Promise<{ approved: boolean; by: string; ms: number }>((resolve, reject) => {
-    pendingApprovals.set(orderId, { 
-      orderId, 
-      resolve: (approved) => {
+    pendingApprovals.set(orderId, {
+      orderId,
+      resolve: (approved, by) => {
         resolve({
           approved,
-          by: `telegram:${chatId}`,
+          by,
           ms: Date.now() - sentAt,
         });
-      }, 
+      },
       reject,
-      sentAt 
+      sentAt,
     });
   });
 }
@@ -142,7 +172,7 @@ export async function startCallbackPolling(): Promise<void> {
   if (pollingActive) return;
   pollingActive = true;
   const token = getBotToken();
-  const allowedChatId = getChatId();
+  const allowedUserIds = getAllowedUserIds();
 
   console.log('[summon/telegram] Starting callback polling...');
 
@@ -178,8 +208,8 @@ export async function startCallbackPolling(): Promise<void> {
         const callback = update.callback_query;
         if (!callback?.data || !callback?.from?.id) continue;
 
-        // Security: Validate the user ID matches the configured approver
-        if (callback.from.id.toString() !== allowedChatId) {
+        // Security: only configured approver user IDs may approve/reject.
+        if (!allowedUserIds.has(callback.from.id.toString())) {
           console.warn(`[summon/telegram] ⚠️ Unauthorized approval attempt from user ${callback.from.id}`);
           continue;
         }
@@ -206,12 +236,15 @@ export async function startCallbackPolling(): Promise<void> {
 
         if (!pending) continue;
 
-        pending.resolve(approved);
+        // Record the actual approving user (stable id) for the audit trail.
+        pending.resolve(approved, `telegram:${callback.from.id}`);
         pendingApprovals.delete(orderId);
-        
-        console.log(`[summon/telegram] Order ${orderId}: ${approved ? 'APPROVED' : 'REJECTED'} by ${callback.from?.username ?? 'unknown'}`);
+
+        /* v8 ignore next */
+        console.log(`[summon/telegram] Order ${orderId}: ${approved ? 'APPROVED' : 'REJECTED'} by ${callback.from?.username ?? callback.from.id}`);
       }
     } catch (err: any) {
+      /* v8 ignore next 3 */
       if (err.name !== 'TimeoutError') {
         console.error('[summon/telegram] Polling error:', err);
         await sleep(5000);
@@ -240,7 +273,9 @@ export function cancelPendingApproval(orderId: string): boolean {
   return false;
 }
 
-// 6. Export clearPendingApprovals for Testing to avoid global state mock leaks
+/**
+ * Reject and clear all pending approvals (used for test teardown).
+ */
 export function clearPendingApprovals(): void {
   for (const pending of pendingApprovals.values()) {
     pending.reject(new Error('TEARDOWN'));

@@ -8,11 +8,24 @@
  */
 
 import { runProvider } from '@edycutjong/croo-core';
-import type { Deliverable } from '@edycutjong/croo-core';
+import type { Deliverable, Order } from '@edycutjong/croo-core';
 import { sendApprovalPrompt } from './telegram.js';
 import { scheduleSlaGuard } from './sla-guard.js';
 
-// ─── Input / Output Types ──────────────────────────────────────────
+// ─── Output Type ───────────────────────────────────────────────────
+
+interface SignOffResult {
+  approved: boolean;
+  by: string;
+  ms: number;
+}
+
+/** Shape of the buyer's requirements (JSON-encoded on the negotiation). */
+interface SignOffRequirement {
+  prompt: string;
+  context?: string;
+  imageKey?: string;
+}
 
 // ─── Provider ──────────────────────────────────────────────────────
 
@@ -26,74 +39,62 @@ export async function startSummonProvider(
   client: any,
   serviceId: string,
 ): Promise<any> {
-  return runProvider<any>(client, {
-    serviceMatch: (event: any) => {
-      if (event.service_id !== serviceId) return false;
+  return runProvider<SignOffResult>(client, {
+    // Match on the service we registered. The offered price is fixed by the
+    // service's on-chain pricing — it is not carried on the negotiation event,
+    // so price gating must live in the service config, not here.
+    serviceMatch: (event) => event.service_id === serviceId,
 
-      // Surge Pricing Logic
-      const hour = new Date().getUTCHours();
-      // US Business hours: roughly 13:00 to 22:00 UTC (9am - 6pm EST)
-      const isUSBusinessHours = hour >= 13 && hour <= 22;
-      const offerUsdc = parseFloat((event.amount_offered || event.amount || '0') as string);
+    work: async (order: Order): Promise<Deliverable<SignOffResult>> => {
+      // The buyer's input lives on the negotiation as a JSON `requirements`
+      // string — the Order itself does not carry it. Fetch and parse it.
+      const requirement = await loadRequirement(client, order);
 
-      // Prevent NaN from bypassing the surge logic
-      if (!isUSBusinessHours && (Number.isNaN(offerUsdc) || offerUsdc < 5.0)) {
-        console.warn(
-          `[summon] ⚠️ Protocol Flex: Rejecting SLA for ${event.negotiation_id} — Off-hours surge pricing active. Minimum 5.0 USDC required, offered ${offerUsdc}.`
-        );
-        return false;
-      }
+      console.log(`[summon] Order ${order.orderId}: sending approval prompt to Telegram...`);
 
-      return true;
-    },
-
-    work: async (order: any): Promise<Deliverable<any>> => {
-      // Data Safety: Strict runtime validation
-      const input = order.requirement;
-      if (!input || typeof input !== 'object' || typeof input.prompt !== 'string') {
-        throw new Error('Invalid requirement: "prompt" must be a valid string');
-      }
-
-      console.log(`[summon] Order ${order.id}: sending approval prompt to Telegram...`);
-
-      // File Handoff Flex: Fetch presigned URL if an imageKey is provided
+      // File Handoff: fetch a presigned URL if an imageKey is provided.
       let imageUrl: string | undefined;
-      if (typeof input.imageKey === 'string' && input.imageKey.trim() !== '') {
+      if (typeof requirement.imageKey === 'string' && requirement.imageKey.trim() !== '') {
         try {
-          console.log(`[summon] Order ${order.id}: Fetching presigned URL for imageKey...`);
-          imageUrl = await client.getDownloadURL(input.imageKey);
+          console.log(`[summon] Order ${order.orderId}: fetching presigned URL for imageKey...`);
+          imageUrl = await client.getDownloadURL(requirement.imageKey);
         } catch (fetchErr) {
-          console.warn(`[summon] ⚠️ Failed to fetch URL for imageKey ${input.imageKey}. Proceeding text-only.`, fetchErr);
+          console.warn(
+            `[summon] ⚠️ Failed to fetch URL for imageKey ${requirement.imageKey}. Proceeding text-only.`,
+            fetchErr,
+          );
         }
       }
 
-      // Schedule SLA guard
-      const cancelGuard = scheduleSlaGuard(client, {
-        orderId: order.id,
-        slaMinutes: order.sla_minutes ?? 10,
-        paidAt: order.paid_at ?? new Date().toISOString(),
-        guardMs: 60_000,
+      // Schedule the SLA guard. Its only job is to cancel the pending Telegram
+      // approval just before the deadline so `work()` throws SLA_TIMEOUT and the
+      // provider loop performs the single authoritative rejectOrder (clean
+      // refund). It fires ahead of the SDK's own 60s guard so the human's
+      // buttons are cleared and only one reject is issued.
+      const cancelGuard = scheduleSlaGuard({
+        orderId: order.orderId,
+        slaDeadline: order.slaDeadline,
+        guardMs: 90_000,
       });
 
       try {
-        const promptText = typeof input.context === 'string'
-          ? `${input.prompt}\n\n<i>Context: ${input.context}</i>`
-          : input.prompt;
+        const promptText = typeof requirement.context === 'string'
+          ? `${requirement.prompt}\n\n<i>Context: ${requirement.context}</i>`
+          : requirement.prompt;
 
-        const result = await sendApprovalPrompt(order.id, promptText, imageUrl);
+        const result = await sendApprovalPrompt(order.orderId, promptText, imageUrl);
 
         console.log(
-          `[summon] Order ${order.id}: human ${result.approved ? 'APPROVED' : 'REJECTED'} in ${result.ms}ms`,
+          `[summon] Order ${order.orderId}: human ${result.approved ? 'APPROVED' : 'REJECTED'} in ${result.ms}ms`,
         );
 
         return {
           type: 'schema',
           data: result,
         };
-      } catch (err: any) {
-        if (err.message === 'SLA_TIMEOUT') {
-          console.warn(`[summon] Order ${order.id} was aborted locally due to SLA timeout.`);
-          throw err;
+      } catch (err) {
+        if (err instanceof Error && err.message === 'SLA_TIMEOUT') {
+          console.warn(`[summon] Order ${order.orderId} aborted locally — SLA timeout, deferring to clean refund.`);
         }
         throw err;
       } finally {
@@ -103,4 +104,35 @@ export async function startSummonProvider(
 
     slaGuardMs: 60_000,
   });
+}
+
+/**
+ * Load and validate the buyer's requirement from the order's negotiation.
+ * Throws a descriptive error if the payload is missing or malformed.
+ */
+async function loadRequirement(client: any, order: Order): Promise<SignOffRequirement> {
+  let raw: string;
+  try {
+    const negotiation = await client.getNegotiation(order.negotiationId);
+    raw = negotiation?.requirements ?? '';
+  } catch (err) {
+    throw new Error(`Invalid requirement: failed to load negotiation ${order.negotiationId}: ${String(err)}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('Invalid requirement: "requirements" must be a valid JSON object');
+  }
+
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    typeof (parsed as SignOffRequirement).prompt !== 'string'
+  ) {
+    throw new Error('Invalid requirement: "prompt" must be a valid string');
+  }
+
+  return parsed as SignOffRequirement;
 }

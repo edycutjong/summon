@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   # ── STAGE 1: Code Quality (parallel with Stage 2) ─────────
-  frontend-quality:
+  code-quality:
     name: "Stage 1 · Code Quality"
     runs-on: ubuntu-latest
     strategy:
@@ -79,7 +79,7 @@ jobs:
   # ── STAGE 3: Build Verification ───────────────────────────
   build:
     name: "Stage 3 · Build Verification"
-    needs: [frontend-quality]
+    needs: [code-quality]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -94,9 +94,9 @@ jobs:
       - name: Production build
         run: npm run build
 
-  # ── STAGE 6: Deploy Gate (main only) ──────────────────────
+  # ── STAGE 4: Deploy Gate (main only) ──────────────────────
   deploy-gate:
-    name: "Stage 6 · Deploy Gate"
+    name: "Stage 4 · Deploy Gate"
     needs: [build, secret-scan, dependency-audit]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

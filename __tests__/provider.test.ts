@@ -1,14 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { startSummonProvider } from '../src/provider.js';
 import * as telegram from '../src/telegram.js';
 import * as crooCore from '@edycutjong/croo-core';
 
-// Mock croo-core runProvider
+// Mock croo-core runProvider so we can inspect the handlers it receives.
 vi.mock('@edycutjong/croo-core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@edycutjong/croo-core')>();
   return {
     ...actual,
-    runProvider: vi.fn().mockImplementation((client, handlers) => handlers),
+    runProvider: vi.fn().mockImplementation((_client, handlers) => handlers),
   };
 });
 
@@ -16,147 +16,175 @@ vi.mock('../src/telegram.js', () => ({
   sendApprovalPrompt: vi.fn(),
 }));
 
+// Stub the SLA guard so no real timers are scheduled during work() tests.
+vi.mock('../src/sla-guard.js', () => ({
+  scheduleSlaGuard: vi.fn(() => () => {}),
+}));
+
+/** Build an SDK-shaped Order (camelCase, no inline requirement). */
+function makeOrder(overrides: Record<string, unknown> = {}) {
+  return {
+    orderId: 'o1',
+    negotiationId: 'n1',
+    serviceId: 'test_service',
+    price: '1.0',
+    paidAt: new Date().toISOString(),
+    slaDeadline: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    ...overrides,
+  };
+}
+
+/** A client whose negotiation carries the given requirement payload. */
+function clientWithRequirement(requirement: unknown, extra: Record<string, unknown> = {}) {
+  return {
+    getNegotiation: vi.fn().mockResolvedValue({
+      negotiationId: 'n1',
+      requirements: typeof requirement === 'string' ? requirement : JSON.stringify(requirement),
+    }),
+    ...extra,
+  };
+}
+
 describe('Summon Provider', () => {
-  it('registers with runProvider using correct serviceId and allows valid price', async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('registers with runProvider and matches only its own serviceId', async () => {
     const client = {};
     const handlers: any = await startSummonProvider(client, 'test_service');
-    
+
     expect(crooCore.runProvider).toHaveBeenCalledWith(client, expect.any(Object));
-    expect(handlers.serviceMatch({ service_id: 'test_service', amount_offered: '10.0' } as any)).toBe(true);
-    expect(handlers.serviceMatch({ service_id: 'other', amount_offered: '10.0' } as any)).toBe(false);
+    expect(handlers.serviceMatch({ service_id: 'test_service' } as any)).toBe(true);
+    expect(handlers.serviceMatch({ service_id: 'other' } as any)).toBe(false);
     expect(handlers.slaGuardMs).toBe(60_000);
   });
 
-  it('rejects during off-hours if offered amount is less than 5.0', async () => {
-    const client = {};
+  it('throws if the negotiation requirements lack a prompt', async () => {
+    const client = clientWithRequirement({});
     const handlers: any = await startSummonProvider(client, 'test_service');
-    
-    // Mock the Date to force off-hours (e.g. 23:00 UTC)
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-06-11T23:00:00Z'));
-    
-    expect(handlers.serviceMatch({ service_id: 'test_service', amount_offered: '2.0', negotiation_id: 'n1' } as any)).toBe(false);
-    
-    // Should accept if amount is >= 5.0 even in off-hours
-    expect(handlers.serviceMatch({ service_id: 'test_service', amount_offered: '5.0', negotiation_id: 'n2' } as any)).toBe(true);
 
-    // Should use event.amount if amount_offered is missing
-    expect(handlers.serviceMatch({ service_id: 'test_service', amount: '2.0', negotiation_id: 'n3' } as any)).toBe(false);
-    
-    // Should default to '0' if both are missing
-    expect(handlers.serviceMatch({ service_id: 'test_service', negotiation_id: 'n4' } as any)).toBe(false);
-    
-    vi.useRealTimers();
+    await expect(handlers.work(makeOrder())).rejects.toThrow('Invalid requirement: "prompt"');
   });
 
-  it('throws error if prompt is missing from requirement', async () => {
-    const handlers: any = await startSummonProvider({}, 'test_service');
-    
-    await expect(handlers.work({
-      id: 'o1',
-      requirement: {},
-    } as any)).rejects.toThrow('Invalid requirement: "prompt" must be a valid string');
+  it('throws if the negotiation requirements are not valid JSON', async () => {
+    const client = clientWithRequirement('not-json');
+    const handlers: any = await startSummonProvider(client, 'test_service');
+
+    await expect(handlers.work(makeOrder())).rejects.toThrow('valid JSON object');
   });
 
-  it('calls sendApprovalPrompt and returns deliverable', async () => {
-    const handlers: any = await startSummonProvider({}, 'test_service');
-    
+  it('throws if the negotiation cannot be loaded', async () => {
+    const client = { getNegotiation: vi.fn().mockRejectedValue(new Error('boom')) };
+    const handlers: any = await startSummonProvider(client, 'test_service');
+
+    await expect(handlers.work(makeOrder())).rejects.toThrow('failed to load negotiation');
+  });
+
+  it('sends the approval prompt with context and returns a schema deliverable', async () => {
+    const client = clientWithRequirement({ prompt: 'Do it?', context: 'Just testing' });
+    const handlers: any = await startSummonProvider(client, 'test_service');
+
     vi.mocked(telegram.sendApprovalPrompt).mockResolvedValueOnce({
       approved: true,
-      by: 'telegram:test',
+      by: 'telegram:42',
       ms: 1200,
     });
 
-    const result = await handlers.work({
-      id: 'o2',
-      requirement: { prompt: 'Do it?', context: 'Just testing' },
-    } as any);
+    const result = await handlers.work(makeOrder({ orderId: 'o2' }));
 
-    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o2', 'Do it?\n\n<i>Context: Just testing</i>', undefined);
-    
+    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith(
+      'o2',
+      'Do it?\n\n<i>Context: Just testing</i>',
+      undefined,
+    );
     expect(result.type).toBe('schema');
     expect(result.data.approved).toBe(true);
-    expect(result.data.by).toBe('telegram:test');
+    expect(result.data.by).toBe('telegram:42');
   });
 
-  it('calls sendApprovalPrompt without context if context is missing', async () => {
-    const handlers: any = await startSummonProvider({}, 'test_service');
-    
+  it('sends the approval prompt without context when none is provided', async () => {
+    const client = clientWithRequirement({ prompt: 'Just a prompt' });
+    const handlers: any = await startSummonProvider(client, 'test_service');
+
     vi.mocked(telegram.sendApprovalPrompt).mockResolvedValueOnce({
       approved: false,
-      by: 'telegram:test',
+      by: 'telegram:42',
       ms: 100,
     });
 
-    const result = await handlers.work({
-      id: 'o3',
-      requirement: { prompt: 'Just a prompt' },
-    } as any);
+    const result = await handlers.work(makeOrder({ orderId: 'o3' }));
 
     expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o3', 'Just a prompt', undefined);
     expect(result.data.approved).toBe(false);
   });
 
-  it('fetches presigned URL if imageKey is provided', async () => {
-    const client = {
-      getDownloadURL: vi.fn().mockResolvedValue('https://example.com/image.jpg'),
-    };
+  it('fetches a presigned image URL when an imageKey is provided', async () => {
+    const client = clientWithRequirement(
+      { prompt: 'Look at this', imageKey: 'img/key.png' },
+      { getDownloadURL: vi.fn().mockResolvedValue('https://signed.example/img.png') },
+    );
     const handlers: any = await startSummonProvider(client, 'test_service');
-    
+
     vi.mocked(telegram.sendApprovalPrompt).mockResolvedValueOnce({
       approved: true,
-      by: 'telegram:test',
-      ms: 100,
+      by: 'telegram:42',
+      ms: 50,
     });
 
-    await handlers.work({
-      id: 'o4',
-      requirement: { prompt: 'Check this image', imageKey: 'img123' },
-    } as any);
+    await handlers.work(makeOrder({ orderId: 'o4' }));
 
-    expect(client.getDownloadURL).toHaveBeenCalledWith('img123');
-    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o4', 'Check this image', 'https://example.com/image.jpg');
+    expect(client.getDownloadURL).toHaveBeenCalledWith('img/key.png');
+    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith(
+      'o4',
+      'Look at this',
+      'https://signed.example/img.png',
+    );
   });
 
-  it('proceeds text-only if getDownloadURL throws', async () => {
-    const client = {
-      getDownloadURL: vi.fn().mockRejectedValue(new Error('S3 error')),
-    };
+  it('falls back to text-only when the image URL fetch fails', async () => {
+    const client = clientWithRequirement(
+      { prompt: 'Look at this', imageKey: 'img/key.png' },
+      { getDownloadURL: vi.fn().mockRejectedValue(new Error('s3 down')) },
+    );
     const handlers: any = await startSummonProvider(client, 'test_service');
-    
+
     vi.mocked(telegram.sendApprovalPrompt).mockResolvedValueOnce({
       approved: true,
-      by: 'telegram:test',
-      ms: 100,
+      by: 'telegram:42',
+      ms: 50,
     });
 
-    await handlers.work({
-      id: 'o5',
-      requirement: { prompt: 'Check this image', imageKey: 'img123' },
-    } as any);
+    await handlers.work(makeOrder({ orderId: 'o5' }));
 
-    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o5', 'Check this image', undefined);
+    expect(telegram.sendApprovalPrompt).toHaveBeenCalledWith('o5', 'Look at this', undefined);
   });
 
-  it('catches SLA_TIMEOUT and rethrows it', async () => {
-    const handlers: any = await startSummonProvider({}, 'test_service');
-    
+  it('rethrows an SLA_TIMEOUT raised while awaiting the human', async () => {
+    const client = clientWithRequirement({ prompt: 'Will time out' });
+    const handlers: any = await startSummonProvider(client, 'test_service');
+
     vi.mocked(telegram.sendApprovalPrompt).mockRejectedValueOnce(new Error('SLA_TIMEOUT'));
 
-    await expect(handlers.work({
-      id: 'o6',
-      requirement: { prompt: 'Will timeout' },
-    } as any)).rejects.toThrow('SLA_TIMEOUT');
+    await expect(handlers.work(makeOrder({ orderId: 'o6' }))).rejects.toThrow('SLA_TIMEOUT');
   });
 
-  it('catches generic errors and rethrows them', async () => {
-    const handlers: any = await startSummonProvider({}, 'test_service');
-    
+  it('rethrows generic errors raised while awaiting the human', async () => {
+    const client = clientWithRequirement({ prompt: 'Will error' });
+    const handlers: any = await startSummonProvider(client, 'test_service');
+
     vi.mocked(telegram.sendApprovalPrompt).mockRejectedValueOnce(new Error('Generic Error'));
 
-    await expect(handlers.work({
-      id: 'o7',
-      requirement: { prompt: 'Will error' },
-    } as any)).rejects.toThrow('Generic Error');
+    await expect(handlers.work(makeOrder({ orderId: 'o7' }))).rejects.toThrow('Generic Error');
+  });
+
+  it('throws an error if the requirement payload is missing requirements', async () => {
+    const handlers: any = await startSummonProvider({}, 'test_service');
+    
+    vi.mocked(crooCore.runProvider).mock.calls[0][0].getNegotiation = vi.fn().mockResolvedValue({});
+
+    await expect(
+      handlers.work({ orderId: 'o8', negotiationId: 'n8' } as any)
+    ).rejects.toThrow('Invalid requirement: "requirements" must be a valid JSON object');
   });
 });
