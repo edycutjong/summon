@@ -26,7 +26,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@edycutjong/croo-core": "^0.1.5"
+    "@edycutjong/croo-core": "^0.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

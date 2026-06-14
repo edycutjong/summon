@@ -39,6 +39,35 @@ Fully autonomous agents can make costly mistakes. Before executing a high-stakes
 - 🔒 **Secure Sign-off:** Only authorized Telegram users can approve or reject.
 - 🎨 **Seamless Integration:** Any agent in the Constellation A2A ecosystem can hire Summon to act as its human arbiter.
 
+## 🌌 The Constellation — On-Chain A2A Graph
+
+Summon is the constellation's **human arbiter**: any agent can hire it on-chain to put a real person in the loop, escrow-backed with an SLA auto-refund if no one responds in time. "An agent pays a human for a yes/no decision, with on-chain escrow" simply doesn't exist on a normal API marketplace.
+
+```mermaid
+graph LR
+    User([Any Agent / User]) -->|hires for sign-off| S[Summon 👤]
+    S -->|Approve / Reject| H((Human via Telegram))
+    M[Maestro 🎼] -->|escalates low-confidence work| S
+    G[Gauntlet 🧤] -.->|certifies| S
+    classDef hot fill:#F59E0B,stroke:#111,color:#111,font-weight:bold;
+    class S hot;
+```
+
+- **SLA safety:** if the human doesn't tap in time, Summon cancels the request and the buyer's escrow is cleanly refunded — no stuck funds.
+- **Adoption wedge:** the [Demo Insurance snippet](#️-hackathon-demo-insurance-copy-paste-integration) lets any hackathon bot add a human fallback in a few lines.
+
+## 🔗 Live Run Log — On-Chain Proof (Base Mainnet)
+
+Real CAP orders Summon fulfilled as a **provider** — an agent paid for a human decision.
+
+**Total real CAP orders: _0_** · _last updated: 2026-06-__
+
+| # | Date | Counterparty (requester) | Amount (USDC) | Order ID | Tx (BaseScan) | Decision |
+|---|------|--------------------------|---------------|----------|---------------|----------|
+| 1 | _2026-06-__ | _Maestro / external bot_ | _0.00_ | `_ord_…_` | [0x…](https://basescan.org/tx/0x…) | ✅ Approved / ❌ Rejected |
+
+> Order IDs + the buyer's pay tx are in the provider logs and the CROO dashboard. Delete this note once populated.
+
 ## 🏗️ Architecture & Tech Stack
 
 | Layer | Technology |
@@ -60,6 +89,13 @@ Fully autonomous agents can make costly mistakes. Before executing a high-stakes
 2. Install: `npm install`
 3. Configure: `cp .env.example .env.local` and fill in `CROO_SDK_KEY`, `SUMMON_SERVICE_ID`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID` (or set `CROO_MOCK=true` for offline mode)
 4. Run: `npm run dev`
+
+### ▶️ Run it now — offline mock mode (no wallet, no USDC)
+```bash
+npm install
+CROO_MOCK=true npm run dev   # boots the provider with no on-chain calls
+```
+For the full human round-trip, set `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` and run `npm run dev` — taps on the Telegram inline buttons resolve the order.
 
 > **For Judges:** Skip account creation! You can test the bot interaction by messaging our live test bot at @SummonTestBot.
 
@@ -97,6 +133,13 @@ dorahacks-croo-summon/
 ├── .env.example       # Environment template
 ├── .github/           # CI workflows
 └── README.md          # You are here
+```
+
+## 🚢 Deploy
+Containerized for any PaaS. Summon is a background **worker** (Telegram polling + CROO WebSocket — no inbound port):
+```bash
+docker build -t summon .
+docker run --env-file .env.local summon
 ```
 
 ## 📄 License
