@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@vitest/coverage-v8": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^9.0.0",
     "license-checker": "^25.0.1",
     "tsx": "^4.0.0",
