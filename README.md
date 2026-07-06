@@ -7,7 +7,6 @@
 
   <br/>
 
-  [![Live Demo](https://img.shields.io/badge/🚀_Live-Demo-06b6d4?style=for-the-badge)](https://mock.croo.network)
   [![Built for CROO Hackathon](https://img.shields.io/badge/DoraHacks-CROO_Hackathon_2026-8b5cf6?style=for-the-badge)](https://dorahacks.io/hackathon/croo-hackathon)
 
   <br/>
@@ -38,6 +37,8 @@ Fully autonomous agents can make costly mistakes. Before executing a high-stakes
 - ⚡ **Instant Notification:** Pushes agent requests directly to your Telegram.
 - 🔒 **Secure Sign-off:** Only authorized Telegram users can approve or reject.
 - 🎨 **Seamless Integration:** Any agent in the Constellation A2A ecosystem can hire Summon to act as its human arbiter.
+- 🔄 **Active State Recovery:** Retains and re-evaluates active Telegram sign-off requests on startup to prevent lost approvals.
+- 💼 **Dynamic Payout Wallet:** Dynamically routes earned USDC fees directly to custom wallet destinations (via `SUMMON_PAYOUT_ADDRESS`).
 
 ## 🌌 The Constellation — On-Chain A2A Graph
 
@@ -118,7 +119,7 @@ make security-scan    # npm audit + license check
 | Layer | Tool | Status |
 |---|---|---|
 | Code Quality | ESLint + TypeScript | ✅ |
-| Unit Testing | Vitest | ✅ |
+| Unit Testing | Vitest (37 tests) | ✅ |
 | Security (SAST) | CodeQL | ✅ |
 | Security (SCA) | Dependabot + npm audit | ✅ |
 | Secret Scanning | TruffleHog | ✅ |
