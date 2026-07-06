@@ -40,6 +40,8 @@ export async function startSummonProvider(
   serviceId: string,
 ): Promise<any> {
   return runProvider<SignOffResult>(client, {
+    enableStateRecovery: true,
+    payoutAddress: process.env.SUMMON_PAYOUT_ADDRESS,
     // Match on the service we registered. The offered price is fixed by the
     // service's on-chain pricing — it is not carried on the negotiation event,
     // so price gating must live in the service config, not here.
