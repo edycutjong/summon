@@ -61,13 +61,11 @@ graph LR
 
 Real CAP orders Summon fulfilled as a **provider** — an agent paid for a human decision.
 
-**Total real CAP orders: _0_** · _last updated: 2026-06-__
+**Total real CAP orders: 1** · _last updated: 2026-07-07_ · an agent paid for a human decision, delivered over Telegram. `[pay tx]` · `[deliver tx]` on Base Mainnet.
 
-| # | Date | Counterparty (requester) | Amount (USDC) | Order ID | Tx (BaseScan) | Decision |
-|---|------|--------------------------|---------------|----------|---------------|----------|
-| 1 | _2026-06-__ | _Maestro / external bot_ | _0.00_ | `_ord_…_` | [0x…](https://basescan.org/tx/0x…) | ✅ Approved / ❌ Rejected |
-
-> Order IDs + the buyer's pay tx are in the provider logs and the CROO dashboard. Delete this note once populated.
+| # | Date | Counterparty (requester) | USDC | Order ID | Tx (BaseScan) | Decision |
+|---|------|--------------------------|------|----------|---------------|----------|
+| 1 | 2026-07-07 | Maestro (escalation) | 0.05 | `9dc01628` | [pay](https://basescan.org/tx/0xc06282c5979ce93c24ac08ea1079c183da5572ce8171049f7d1d43a402f67861) · [deliver](https://basescan.org/tx/0x1a345f4b6ed1a7346ce99fc773f5cc33e6b3259d5bb753771286d81dbd43ee83) | ✅ Approved (human tapped Approve, 83s) |
 
 ## 🏗️ Architecture & Tech Stack
 
