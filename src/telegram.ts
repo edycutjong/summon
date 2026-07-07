@@ -198,6 +198,7 @@ export async function startCallbackPolling(): Promise<void> {
             id: string;
             data?: string;
             from?: { id: number; username?: string };
+            message?: { message_id: number; chat: { id: number } };
           };
         }>;
       };
@@ -235,6 +236,24 @@ export async function startCallbackPolling(): Promise<void> {
         }).catch(err => console.error('[summon/telegram] Failed to answer callback query:', err));
 
         if (!pending) continue;
+
+        // UX: visibly update the message so the tap has clear feedback — replace
+        // the Approve/Reject buttons with a resolved status line. Fire-and-forget.
+        if (callback.message) {
+          const who = callback.from?.username ? `@${callback.from.username}` : `user ${callback.from.id}`;
+          const stamp = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+          fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: callback.message.chat.id,
+              message_id: callback.message.message_id,
+              text: `${approved ? '✅ APPROVED' : '❌ REJECTED'} by ${who}\nOrder ${orderId}\n${stamp}`,
+              reply_markup: { inline_keyboard: [] },
+            }),
+            signal: AbortSignal.timeout(5000),
+          }).catch(err => console.error('[summon/telegram] Failed to edit message:', err));
+        }
 
         // Record the actual approving user (stable id) for the audit trail.
         pending.resolve(approved, `telegram:${callback.from.id}`);
