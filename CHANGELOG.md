@@ -1,3 +1,10 @@
+# [0.3.0](https://github.com/edycutjong/summon/compare/v0.2.1...v0.3.0) (2026-07-07)
+
+
+### Features
+
+* **telegram:** replace approve/reject buttons with a resolved status line on tap ([98c9a4b](https://github.com/edycutjong/summon/commit/98c9a4bca80f20fafe6b6dc2fec4adcbb06adfe4))
+
 ## [0.2.1](https://github.com/edycutjong/summon/compare/v0.2.0...v0.2.1) (2026-07-06)
 
 
