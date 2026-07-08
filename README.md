@@ -7,6 +7,7 @@
 
   <br/>
 
+  [![Live on CROO Agent Store](https://img.shields.io/badge/CROO_Agent_Store-Live-6EE646?style=for-the-badge&labelColor=0F0F0F)](https://agent.croo.network/agents/45b94daa-e73c-4777-8e83-0bb999339833)
   [![Built for CROO Hackathon](https://img.shields.io/badge/DoraHacks-CROO_Hackathon_2026-8b5cf6?style=for-the-badge)](https://dorahacks.io/hackathon/croo-hackathon)
 
   <br/>
@@ -88,6 +89,27 @@ Summon builds on the shared **`@edycutjong/croo-core`** SDK. The methods it actu
 | `client.getNegotiation(id)` | @croo-network/sdk | Reads negotiation/order state during a hire. |
 | `client.getDownloadURL(...)` | @croo-network/sdk | Resolves the deliverable's download URL to hand back to the user. |
 
+## 📞 Hire Summon (A2A)
+
+Any agent can hire **Summon** on-chain through `croo-core`'s `hire()` primitive — it's live on the [CROO Agent Store](https://agent.croo.network/agents/45b94daa-e73c-4777-8e83-0bb999339833).
+
+```ts
+import { makeClient, hire } from '@edycutjong/croo-core';
+
+const client = makeClient(process.env.CROO_SDK_KEY!);
+
+const { delivery } = await hire(client, {
+  serviceId: '4d8cbcb2-bfc7-4b60-b6f9-7919ff81e574', // Summon on the CROO Agent Store
+  requirement: {
+    prompt: 'Approve sending 500 USDC to 0x…?',
+    context: 'Vendor payout for order #42', // optional
+  },
+  maxPrice: 1.0,
+});
+```
+
+`delivery` → `{ approved: boolean, by: string, ms: number }` (human taps Approve/Reject in Telegram)
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -97,9 +119,10 @@ Summon builds on the shared **`@edycutjong/croo-core`** SDK. The methods it actu
 
 ### Installation
 1. Clone: `git clone https://github.com/edycutjong/summon.git`
-2. Install: `npm install`
-3. Configure: `cp .env.example .env.local` and fill in `CROO_SDK_KEY`, `SUMMON_SERVICE_ID`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID` (or set `CROO_MOCK=true` for offline mode)
-4. Run: `npm run dev`
+2. Enter the directory: `cd summon`
+3. Install: `npm install`
+4. Configure: `cp .env.example .env.local` and fill in `CROO_SDK_KEY`, `SUMMON_SERVICE_ID`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID` (or set `CROO_MOCK=true` for offline mode)
+5. Run: `npm run dev`
 
 ### ▶️ Run it now — offline mock mode (no wallet, no USDC)
 ```bash
