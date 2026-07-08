@@ -1,7 +1,14 @@
-name: Release
+name: Release & Deploy
 
+# Chained pipeline: runs ONLY after "CI/CD Pipeline" (ci.yml) succeeds on main.
+# 1. semantic-release  -> bumps version + CHANGELOG + git tag + GitHub release
+# 2. railway up        -> builds & deploys the freshly-versioned source to Railway
+#
+# The release commit is tagged "[skip ci]" so it does NOT re-trigger CI (no loop).
 on:
-  push:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
     branches: [main]
 
 permissions:
@@ -9,18 +16,39 @@ permissions:
   issues: write
   pull-requests: write
 
+concurrency:
+  group: release-deploy-croo-summon
+  cancel-in-progress: false
+
 jobs:
-  release:
-    name: Semantic Release
+  release-deploy:
+    name: Release & Deploy
     runs-on: ubuntu-latest
+    # Only proceed when the upstream CI run actually passed.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout main
+        uses: actions/checkout@v7
         with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v6
+          ref: main
+          fetch-depth: 0 # full history for semantic-release
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: 20
-      - name: Release
+
+      # -- STEP 1: Version bump + changelog + GitHub release --
+      - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx --yes -p semantic-release -p @semantic-release/changelog -p @semantic-release/git semantic-release
+
+      # -- STEP 2: Build & deploy the (now version-bumped) source --
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service croo-summon --ci

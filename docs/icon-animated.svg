@@ -15,7 +15,7 @@
 
   <!-- glow/pulse layer: position is a real attribute (renders without CSS); opacity breathes via SMIL -->
   <g transform="translate(52, 52) scale(17)" filter="url(#glow)" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.55">
-    <animate attributeName="opacity" values="0.4;0.8;0.4" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.28;0.95;0.28" dur="3s" repeatCount="indefinite"/>
       <path d="m16 11 2 2 4-4" />
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
@@ -24,7 +24,7 @@
   <!-- main layer: base position via attribute; gentle float via additive SMIL -->
   <g transform="translate(52, 52)" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
     <animateTransform attributeName="transform" type="translate" additive="sum"
-      values="0 0; 0 -8; 0 0" keyTimes="0;0.5;1"
+      values="0 0; 0 -16; 0 0" keyTimes="0;0.5;1"
       dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.45 0 0.55 1;0.45 0 0.55 1"/>
     <g transform="scale(17)">
       <path d="m16 11 2 2 4-4" />
