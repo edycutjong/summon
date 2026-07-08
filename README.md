@@ -159,7 +159,7 @@ make security-scan    # npm audit + license check
 
 ## 📁 Project Structure
 ```text
-dorahacks-croo-summon/
+summon/
 ├── docs/              # README assets (screenshots)
 ├── src/               # Application source code
 ├── scripts/           # Build and run scripts
