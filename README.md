@@ -15,6 +15,7 @@
 
   ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)
   ![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat&logo=node.js&logoColor=white)
+  [![Release](https://img.shields.io/github/v/release/edycutjong/summon?style=flat&logo=github)](https://github.com/edycutjong/summon/releases)
   [![CI](https://github.com/edycutjong/summon/actions/workflows/ci.yml/badge.svg)](https://github.com/edycutjong/summon/actions/workflows/ci.yml)
 
 </div>
