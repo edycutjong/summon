@@ -40,8 +40,34 @@
   ::selection{background:color-mix(in srgb,var(--accent) 45%,transparent)}
   :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
   :focus:not(:focus-visible){outline:none}
-  .wrap{max-width:1020px;margin:0 auto;padding:0 28px}
+  .wrap{max-width:1020px;margin:0 auto;padding:0 28px;position:relative;z-index:1}
   .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* ── ambient field ─────────────────────────────────────────────────────────
+     The one decorative layer on the page (spec §13, amendment A3). Two parts:
+     an accent wash anchored to the hero, and a slow constellation of agent
+     nodes that settle payments along their edges — the product's own metaphor,
+     not scenery. Injected by script, so no-JS gets the flat v2 page unchanged.
+     Confined to the top of the document and masked out before the ledger, so
+     everything a judge actually reads stays ink-on-paper. */
+  body{position:relative}
+  .field{position:absolute;top:0;left:0;width:100%;height:min(1120px,132vh);
+    z-index:0;pointer-events:none;overflow:hidden;contain:paint;
+    -webkit-mask-image:linear-gradient(#000 0%,#000 40%,transparent 90%);
+            mask-image:linear-gradient(#000 0%,#000 40%,transparent 90%)}
+  .field::before{content:"";position:absolute;top:-15%;left:50%;
+    width:min(1560px,158vw);aspect-ratio:3/2;transform:translateX(-50%);
+    background:
+      radial-gradient(44% 42% at 48% 36%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 70%),
+      radial-gradient(58% 50% at 10% 2%,color-mix(in srgb,var(--accent) 7%,transparent),transparent 66%),
+      radial-gradient(48% 40% at 90% 14%,color-mix(in srgb,var(--in) 5%,transparent),transparent 62%)}
+  .field canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* paper grain over the whole page — the texture that keeps the flat
+     neutrals from reading as a plain dark theme */
+  body::after{content:"";position:fixed;inset:0;z-index:2;pointer-events:none;
+    opacity:.035;background-repeat:repeat;background-size:180px 180px;
+    background-image:url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxODAnIGhlaWdodD0nMTgwJz48ZmlsdGVyIGlkPSduJz48ZmVUdXJidWxlbmNlIHR5cGU9J2ZyYWN0YWxOb2lzZScgYmFzZUZyZXF1ZW5jeT0nLjknIG51bU9jdGF2ZXM9JzQnIHN0aXRjaFRpbGVzPSdzdGl0Y2gnLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0nMTgwJyBoZWlnaHQ9JzE4MCcgZmlsdGVyPSd1cmwoI24pJy8+PC9zdmc+")}
+  @media (max-width:640px){body::after{opacity:.028}}
 
   section{padding:76px 0;border-top:1px solid var(--rule-2)}
   .label{display:flex;align-items:baseline;gap:14px;margin:0 0 26px;
@@ -258,6 +284,7 @@
     .constel a:hover .node{transform:none}
     .cap:hover .cap-i{transform:none}
     .ledger .tx a:hover .arw{transform:none}
+    /* the field keeps its wash and one static frame; nothing moves */
   }
 </style>
 </head>
@@ -510,6 +537,125 @@
     }, {threshold:.12, rootMargin:"0px 0px -8% 0px"});
     rev.forEach(function(el){ io.observe(el); });
   } else { rev.forEach(function(el){ el.classList.add("in"); }); }
+})();
+
+/* ── ambient field ────────────────────────────────────────────────────────────
+   Agent nodes drift; an edge is drawn whenever two are close enough to trade;
+   a settlement pulse travels an edge every few seconds. Accent-tinted, ~10%
+   alpha, hero-only, and it holds a single static frame under reduced motion. */
+(function(){
+  var host = document.createElement("div");
+  host.className = "field"; host.setAttribute("aria-hidden","true");
+  var cv = document.createElement("canvas"); host.appendChild(cv);
+  document.body.insertBefore(host, document.body.firstChild);
+
+  var ctx = cv.getContext && cv.getContext("2d");
+  if(!ctx){ host.parentNode.removeChild(host); return; }
+
+  var hex = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  var m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
+  var v = m ? parseInt(m[1],16) : 0x6366F1;
+  var RGB = (v>>16&255)+","+(v>>8&255)+","+(v&255);
+
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var W=0,H=0,D=150,nodes=[],pulses=[],raf=0,last=0;
+
+  function rnd(a,b){ return a+Math.random()*(b-a); }
+
+  function build(){
+    var r = host.getBoundingClientRect();
+    W = Math.max(1, Math.round(r.width)); H = Math.max(1, Math.round(r.height));
+    var dpr = Math.min(window.devicePixelRatio||1, 2);
+    cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    D = Math.max(110, Math.min(195, W/8.5));
+    var count = Math.round(Math.max(12, Math.min(44, W*H/27000)));
+    nodes = []; pulses = [];
+    for(var i=0;i<count;i++){
+      var hub = i%7===0;
+      nodes.push({x:rnd(0,W), y:rnd(0,H*0.88), vx:rnd(-.13,.13), vy:rnd(-.08,.08),
+                  r:hub?rnd(2.1,3.0):rnd(.8,1.7), hub:hub, flare:0});
+    }
+  }
+
+  function step(k){
+    for(var i=0;i<nodes.length;i++){
+      var n = nodes[i];
+      n.x += n.vx*k; n.y += n.vy*k;
+      if(n.x < -30) n.x = W+30; else if(n.x > W+30) n.x = -30;
+      if(n.y < -30) n.y = H+30; else if(n.y > H+30) n.y = -30;
+      if(n.flare > 0) n.flare = Math.max(0, n.flare - k/55);
+    }
+    for(var p=pulses.length-1;p>=0;p--){
+      pulses[p].t += k/pulses[p].dur;
+      /* the receiving node flares when the payment lands */
+      if(pulses[p].t >= 1){ pulses[p].b.flare = 1; pulses.splice(p,1); }
+    }
+    if(pulses.length < 2 && Math.random() < .016){
+      var a = nodes[(Math.random()*nodes.length)|0], b = nodes[(Math.random()*nodes.length)|0];
+      if(a !== b && Math.hypot(a.x-b.x, a.y-b.y) < D) pulses.push({a:a,b:b,t:0,dur:rnd(70,130)});
+    }
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ctx.lineWidth = 1;
+    for(var i=0;i<nodes.length;i++){
+      var a = nodes[i];
+      for(var j=i+1;j<nodes.length;j++){
+        var b = nodes[j], dx = a.x-b.x, dy = a.y-b.y, d2 = dx*dx+dy*dy;
+        if(d2 > D*D) continue;
+        var al = (1 - Math.sqrt(d2)/D) * .115;
+        ctx.strokeStyle = "rgba("+RGB+","+al.toFixed(3)+")";
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+      }
+    }
+    for(var n=0;n<nodes.length;n++){
+      var o = nodes[n];
+      ctx.fillStyle = "rgba("+RGB+","+(o.hub?.34:.2)+")";
+      ctx.beginPath(); ctx.arc(o.x,o.y,o.r,0,6.283); ctx.fill();
+      if(o.hub){
+        ctx.strokeStyle = "rgba("+RGB+",.13)";
+        ctx.beginPath(); ctx.arc(o.x,o.y,o.r+5.5,0,6.283); ctx.stroke();
+      }
+      if(o.flare > 0){
+        ctx.strokeStyle = "rgba(95,214,138,"+(o.flare*.3).toFixed(3)+")";
+        ctx.beginPath(); ctx.arc(o.x,o.y,o.r+4+(1-o.flare)*13,0,6.283); ctx.stroke();
+      }
+    }
+    for(var q=0;q<pulses.length;q++){
+      var s = pulses[q], t = s.t, e = t*t*(3-2*t);
+      var x = s.a.x+(s.b.x-s.a.x)*e, y = s.a.y+(s.b.y-s.a.y)*e;
+      var fade = Math.sin(Math.PI*t);
+      ctx.fillStyle = "rgba(95,214,138,"+(fade*.55).toFixed(3)+")";
+      ctx.beginPath(); ctx.arc(x,y,1.9,0,6.283); ctx.fill();
+      ctx.fillStyle = "rgba(95,214,138,"+(fade*.12).toFixed(3)+")";
+      ctx.beginPath(); ctx.arc(x,y,5.5,0,6.283); ctx.fill();
+    }
+  }
+
+  function loop(ts){
+    var dt = last ? Math.min(50, ts-last) : 16.7; last = ts;
+    step(dt/16.7); draw(); raf = requestAnimationFrame(loop);
+  }
+  function start(){ if(!raf && !reduce){ last = 0; raf = requestAnimationFrame(loop); } }
+  function stop(){ if(raf){ cancelAnimationFrame(raf); raf = 0; } }
+
+  build(); draw();
+  if(reduce) return;
+
+  var pending = 0;
+  addEventListener("resize", function(){
+    if(pending) cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(function(){ pending = 0; build(); draw(); });
+  });
+  addEventListener("scroll", function(){
+    if(scrollY < host.offsetHeight) start(); else stop();
+  }, {passive:true});
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden) stop(); else if(scrollY < host.offsetHeight) start();
+  });
+  start();
 })();
 </script>
 </body>
