@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Summon 👤 — CROO Constellation</title>
+<title>Summon — CROO Constellation</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0C0C0E">
@@ -72,11 +72,13 @@
   .btn:hover{border-color:var(--ink-2);color:var(--ink)}
   .btn.key{background:var(--ink);color:var(--sink);border-color:var(--ink);font-weight:650}
   .btn.key:hover{background:#fff;border-color:#fff;color:var(--sink)}
+  .btn:active{transform:translateY(1px)}
 
   .band{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:62px 0 0;
     border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
   .band > div{padding:26px 22px 24px;border-left:1px solid var(--rule-2)}
   .band > div:first-child{border-left:0;padding-left:0}
+  .band > div.reveal .band-v{transition:opacity .6s ease,transform .6s cubic-bezier(.2,.6,.2,1)}
   .band-v{display:block;font:500 clamp(1.9rem,3.6vw,2.6rem)/1 var(--mono);
     font-variant-numeric:tabular-nums;letter-spacing:-.035em;color:var(--ink)}
   .band-l{display:block;margin-top:10px;font:600 10.5px/1.4 var(--sans);letter-spacing:.13em;
@@ -92,7 +94,11 @@
   .ledger th:nth-child(3),.ledger td:nth-child(3){text-align:right;padding-right:30px}
   .ledger th:nth-child(5),.ledger td:nth-child(5){text-align:right;padding-right:0;white-space:nowrap}
   .ledger td:nth-child(4){width:99%}
-  .ledger tr:hover td{background:var(--raise)}
+  .ledger tbody tr:not(.turn){transition:background .18s ease}
+  .ledger tbody tr:not(.turn):hover td{background:var(--raise)}
+  /* a rule slides in on the row you're reading — no reflow, box-shadow only */
+  .ledger tbody tr:not(.turn) td:first-child{box-shadow:inset 2px 0 0 -2px var(--accent);transition:box-shadow .18s ease}
+  .ledger tbody tr:not(.turn):hover td:first-child{box-shadow:inset 2px 0 0 0 var(--accent)}
   .ledger .oid{font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
   .ledger .who{color:var(--ink);font-weight:550;white-space:nowrap}
   .ledger .amt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:15px;
@@ -103,7 +109,10 @@
   .ledger .note{font-size:13.5px;color:var(--muted)}
   .ledger .tx a{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-decoration:none;
     border-bottom:1px solid var(--rule);padding-bottom:1px;transition:color .15s,border-color .15s;white-space:nowrap}
+  .ledger .tx a{display:inline-block}
   .ledger .tx a:hover{color:var(--accent);border-color:var(--accent)}
+  .ledger .tx a .arw{display:inline-block;transition:transform .18s cubic-bezier(.2,.6,.2,1)}
+  .ledger .tx a:hover .arw{transform:translate(2px,-2px)}
   .ledger .tx a+a{margin-left:12px}
   .ledger tr.net td{border-bottom:0;border-top:1px solid var(--rule);padding-top:20px;
     font-weight:600;color:var(--ink)}
@@ -124,7 +133,10 @@
   .caps{display:grid;grid-template-columns:1fr 1fr;gap:0 56px}
   .cap{padding:22px 0;border-top:1px solid var(--rule-2);display:grid;
     grid-template-columns:auto 1fr;gap:16px;align-items:start}
-  .cap-i{font-size:1.05rem;line-height:1.5;opacity:.9;color:var(--accent)}
+  .cap-i{font-size:1.05rem;line-height:1.5;opacity:.75;color:var(--accent);
+    transition:opacity .18s ease,transform .18s cubic-bezier(.2,.6,.2,1)}
+  .cap:hover .cap-i{opacity:1;transform:translateX(2px)}
+  .cap h3{transition:color .18s ease}
   .cap h3{margin:0 0 4px;font:600 15px/1.4 var(--sans);color:var(--ink)}
   .cap p{margin:0;color:var(--muted);font-size:13.8px;line-height:1.6}
   .cap code{font-family:var(--mono);font-size:12.5px;color:var(--ink-2)}
@@ -137,6 +149,11 @@
   .step h3{margin:12px 0 5px;font:600 14.5px/1.35 var(--sans);color:var(--ink)}
   .step p{margin:0;font-size:13px;line-height:1.55;color:var(--muted)}
   .step.hot h3{color:var(--accent)}
+  .step::before{content:"";position:absolute;top:-1px;left:0;right:0;height:1px;
+    background:var(--accent);transform:scaleX(0);transform-origin:left;transition:transform .28s cubic-bezier(.2,.6,.2,1)}
+  .step:hover::before{transform:scaleX(1)}
+  .step:hover .step-n{color:var(--accent)}
+  .step-n{transition:color .18s ease}
   .step .score{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink)}
 
   .fig{margin:0;border:1px solid var(--rule-2);border-radius:3px;background:var(--sink);padding:10px}
@@ -156,6 +173,10 @@
   .net-wrap{border:1px solid var(--rule-2);border-radius:3px;padding:20px 16px 6px;background:var(--sink)}
   .constel{width:100%;height:auto;display:block}
   .constel a{cursor:pointer}
+  .constel a .node{transition:transform .22s cubic-bezier(.2,.6,.2,1),stroke-opacity .22s ease;transform-origin:center;transform-box:fill-box}
+  .constel a:hover .node{transform:scale(1.09);stroke-opacity:1}
+  .constel a .nlabel{transition:fill .22s ease}
+  .constel a:hover .nlabel{fill:var(--ink-2)}
   .legend{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:14px 0 6px;
     font:500 11.5px/1 var(--sans);letter-spacing:.06em;color:var(--muted)}
   .legend span{display:inline-flex;align-items:center;gap:9px}
@@ -181,11 +202,25 @@
   .sib{padding:7px 16px;border-left:1px solid var(--rule);text-decoration:none;
     font:500 14px/1.4 var(--sans);color:var(--ink-2);transition:color .15s}
   .sib:first-child{padding-left:0;border-left:0}
+  .sib{position:relative}
+  .sib::after{content:"";position:absolute;left:16px;right:16px;bottom:2px;height:1px;
+    background:var(--accent);transform:scaleX(0);transform-origin:left;transition:transform .22s cubic-bezier(.2,.6,.2,1)}
+  .sib:first-child::after{left:0}
   .sib:hover{color:var(--accent)}
+  .sib:hover::after{transform:scaleX(1)}
   .foot-b{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:baseline;
     padding-top:26px;border-top:1px solid var(--rule-2);font-size:13px}
   .foot-b a{color:var(--muted);text-decoration:none;margin-right:20px;transition:color .15s}
   .foot-b a:hover{color:var(--ink-2)}
+  .rel{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 26px;padding:14px 0;
+    border-top:1px solid var(--rule-2);border-bottom:1px solid var(--rule-2);
+    font:500 12.5px/1 var(--sans);color:var(--muted)}
+  .rel .v{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink);
+    font-size:13px;letter-spacing:-.01em}
+  .rel .sep{width:1px;height:11px;background:var(--rule)}
+  .rel a{color:var(--muted);text-decoration:none;border-bottom:1px solid var(--rule);transition:color .18s ease,border-color .18s ease}
+  .rel a:hover{color:var(--accent);border-color:var(--accent)}
+  .rel .tag-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none}
 
   .reveal{opacity:0;transform:translateY(10px);transition:opacity .7s cubic-bezier(.2,.6,.2,1),transform .7s cubic-bezier(.2,.6,.2,1)}
   .reveal.in{opacity:1;transform:none}
@@ -214,6 +249,15 @@
     .reveal{opacity:1;transform:none;transition:none}
     .status .dot{animation:none}
     html{scroll-behavior:auto}
+    /* every micro-interaction added for polish is opt-out, not decoration */
+    .ledger tbody tr,.ledger tbody tr td:first-child,.ledger .tx a .arw,
+    .cap-i,.step::before,.step-n,.sib::after,.constel a .node,.constel a .nlabel,
+    .btn,.rel a{transition:none}
+    .step::before,.sib::after{display:none}
+    .btn:active{transform:none}
+    .constel a:hover .node{transform:none}
+    .cap:hover .cap-i{transform:none}
+    .ledger .tx a:hover .arw{transform:none}
   }
 </style>
 </head>
@@ -259,7 +303,7 @@
               <td class="who">Maestro</td>
               <td class="amt in">+0.05</td>
               <td class="note"><b>✓ Approved</b> — human tapped Approve, 83s round trip</td>
-              <td class="tx"><a href="https://basescan.org/tx/0xc06282c5979ce93c24ac08ea1079c183da5572ce8171049f7d1d43a402f67861" target="_blank" rel="noopener" title="pay 0xc06282…f67861">pay ↗</a><a href="https://basescan.org/tx/0x1a345f4b6ed1a7346ce99fc773f5cc33e6b3259d5bb753771286d81dbd43ee83" target="_blank" rel="noopener" title="del 0x1a345f…43ee83">del ↗</a></td>
+              <td class="tx"><a href="https://basescan.org/tx/0xc06282c5979ce93c24ac08ea1079c183da5572ce8171049f7d1d43a402f67861" target="_blank" rel="noopener" title="pay 0xc06282…f67861">pay <span class="arw">↗</span></a><a href="https://basescan.org/tx/0x1a345f4b6ed1a7346ce99fc773f5cc33e6b3259d5bb753771286d81dbd43ee83" target="_blank" rel="noopener" title="del 0x1a345f…43ee83">del <span class="arw">↗</span></a></td>
             </tr>
           </tbody>
         </table>
@@ -376,37 +420,37 @@
       <text x="320" y="59" text-anchor="middle" font-size="19" fill="#B4B0A9">◇</text>
       <text x="320" y="22" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Any agent</text>
 
-      <a href="https://maestro.croo.edycu.dev/" target="_top">
-        <circle cx="320" cy="378" r="26" fill="#111113" stroke="#8b5cf6" stroke-opacity=".6" stroke-width="1.5"/>
-        <text x="320" y="386" text-anchor="middle" font-size="20">🎼</text>
-        <text x="320" y="419" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Maestro</text>
+      <a href="https://maestro.croo.edycu.dev/" target="_top" aria-label="Maestro">
+        <circle class="node" cx="320" cy="378" r="26" fill="#111113" stroke="#8b5cf6" stroke-opacity=".6" stroke-width="1.5"/>
+        <g transform="translate(309.50,367.50) scale(0.8750)" fill="none" stroke="#8b5cf6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx='12' cy='4.5' r='2.5'/><path d='m10.2 6.3-3.9 3.9'/><circle cx='4.5' cy='12' r='2.5'/><path d='M7 12h10'/><circle cx='19.5' cy='12' r='2.5'/><path d='m13.8 17.7 3.9-3.9'/><circle cx='12' cy='19.5' r='2.5'/></g>
+        <text class="nlabel" x="320" y="419" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Maestro</text>
       </a>
-      <a href="https://gauntlet.croo.edycu.dev/" target="_top">
-        <circle cx="72" cy="168" r="26" fill="#111113" stroke="#EF4444" stroke-opacity=".6" stroke-width="1.5"/>
-        <text x="72" y="176" text-anchor="middle" font-size="20">🧤</text>
-        <text x="72" y="209" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Gauntlet</text>
+      <a href="https://gauntlet.croo.edycu.dev/" target="_top" aria-label="Gauntlet">
+        <circle class="node" cx="72" cy="168" r="26" fill="#111113" stroke="#EF4444" stroke-opacity=".6" stroke-width="1.5"/>
+        <g transform="translate(61.50,157.50) scale(0.8750)" fill="none" stroke="#EF4444" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z'/><path d='m9 12 2 2 4-4'/></g>
+        <text class="nlabel" x="72" y="209" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Gauntlet</text>
       </a>
-      <a href="https://litmus.croo.edycu.dev/" target="_top">
-        <circle cx="568" cy="168" r="26" fill="#111113" stroke="#22D3EE" stroke-opacity=".6" stroke-width="1.5"/>
-        <text x="568" y="176" text-anchor="middle" font-size="20">🧪</text>
-        <text x="568" y="209" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Litmus</text>
+      <a href="https://litmus.croo.edycu.dev/" target="_top" aria-label="Litmus">
+        <circle class="node" cx="568" cy="168" r="26" fill="#111113" stroke="#22D3EE" stroke-opacity=".6" stroke-width="1.5"/>
+        <g transform="translate(557.50,157.50) scale(0.8750)" fill="none" stroke="#22D3EE" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2'/><path d='M8.5 2h7'/><path d='M7 16h10'/></g>
+        <text class="nlabel" x="568" y="209" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Litmus</text>
       </a>
-      <a href="https://worker.croo.edycu.dev/" target="_top">
-        <circle cx="145" cy="350" r="26" fill="#111113" stroke="#6EE646" stroke-opacity=".6" stroke-width="1.5"/>
-        <text x="145" y="358" text-anchor="middle" font-size="20">🛠️</text>
-        <text x="145" y="391" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Worker</text>
+      <a href="https://worker.croo.edycu.dev/" target="_top" aria-label="Worker">
+        <circle class="node" cx="145" cy="350" r="26" fill="#111113" stroke="#6EE646" stroke-opacity=".6" stroke-width="1.5"/>
+        <g transform="translate(134.50,339.50) scale(0.8750)" fill="none" stroke="#6EE646" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'/></g>
+        <text class="nlabel" x="145" y="391" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Worker</text>
       </a>
-      <a href="https://goldilocks.croo.edycu.dev/" target="_top">
-        <circle cx="495" cy="350" r="26" fill="#111113" stroke="#F4B740" stroke-opacity=".6" stroke-width="1.5"/>
-        <text x="495" y="358" text-anchor="middle" font-size="20">🎯</text>
-        <text x="495" y="391" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Goldilocks</text>
+      <a href="https://goldilocks.croo.edycu.dev/" target="_top" aria-label="Goldilocks">
+        <circle class="node" cx="495" cy="350" r="26" fill="#111113" stroke="#F4B740" stroke-opacity=".6" stroke-width="1.5"/>
+        <g transform="translate(484.50,339.50) scale(0.8750)" fill="none" stroke="#F4B740" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='m12 14 4-4'/><path d='M3.34 19a10 10 0 1 1 17.32 0'/></g>
+        <text class="nlabel" x="495" y="391" text-anchor="middle" font-size="11.5" fill="#8A8781" font-weight="600">Goldilocks</text>
       </a>
 
       <circle cx="320" cy="195" r="46" fill="#F59E0B" fill-opacity=".1" stroke="var(--accent)" stroke-width="1.5">
         <animate attributeName="r" values="44;48;44" dur="3.6s" repeatCount="indefinite"/>
       </circle>
       <circle cx="320" cy="195" r="38" fill="#0C0C0E" stroke="var(--accent)" stroke-width="1.5"/>
-      <text x="320" y="204" text-anchor="middle" font-size="26">👤</text>
+      <g transform="translate(305.00,180.00) scale(1.2500)" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d='m16 11 2 2 4-4'/><path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/></g>
     </svg>
       <div class="legend">
         <span><i></i> paid Summon on-chain</span>
@@ -431,6 +475,16 @@
       <a class="sib" href="https://gauntlet.croo.edycu.dev/">Gauntlet</a>
       <a class="sib" href="https://goldilocks.croo.edycu.dev/">Goldilocks</a>
       <a class="sib" href="https://core.croo.edycu.dev/">Core SDK</a>
+    </div>
+    <div class="rel">
+      <span class="tag-dot" aria-hidden="true"></span>
+      <span class="v">v0.3.1</span>
+      <span class="sep" aria-hidden="true"></span>
+      <span>released 2026-07-08</span>
+      <span class="sep" aria-hidden="true"></span>
+      <a href="https://github.com/edycutjong/summon/releases" target="_blank" rel="noopener">All releases ↗</a>
+      <span class="sep" aria-hidden="true"></span>
+      <a href="https://github.com/edycutjong/summon/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog ↗</a>
     </div>
     <div class="foot-b">
       <div>
