@@ -55,12 +55,14 @@
     z-index:0;pointer-events:none;overflow:hidden;contain:paint;
     -webkit-mask-image:linear-gradient(#000 0%,#000 40%,transparent 90%);
             mask-image:linear-gradient(#000 0%,#000 40%,transparent 90%)}
+  /* the wash is the one FIXED slot that varies per project — it is shaped to
+     that page's figure (see WASH below), never a generic centred blob */
   .field::before{content:"";position:absolute;top:-15%;left:50%;
     width:min(1560px,158vw);aspect-ratio:3/2;transform:translateX(-50%);
     background:
-      radial-gradient(44% 42% at 48% 36%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 70%),
-      radial-gradient(58% 50% at 10% 2%,color-mix(in srgb,var(--accent) 7%,transparent),transparent 66%),
-      radial-gradient(48% 40% at 90% 14%,color-mix(in srgb,var(--in) 5%,transparent),transparent 62%)}
+      radial-gradient(34% 52% at 68% 30%,color-mix(in srgb,var(--accent) 17%,transparent),transparent 72%),
+      radial-gradient(52% 46% at 4% 22%,color-mix(in srgb,var(--accent) 6%,transparent),transparent 64%),
+      radial-gradient(30% 34% at 92% 30%,color-mix(in srgb,var(--in) 6%,transparent),transparent 62%)}
   .field canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* paper grain over the whole page — the texture that keeps the flat
      neutrals from reading as a plain dark theme */
@@ -79,8 +81,21 @@
   .lede a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--rule)}
 
   header{padding:92px 0 0;position:relative}
+  .statusline{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:34px}
   .status{display:inline-flex;align-items:center;gap:9px;font:600 11.5px/1 var(--sans);
-    letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);margin-bottom:34px}
+    letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2)}
+  /* the shipped version, one click from the hero to the tag that produced it */
+  .verchip{display:inline-flex;align-items:center;gap:9px;padding:6px 11px;border-radius:3px;
+    border:1px solid var(--rule);text-decoration:none;white-space:nowrap;
+    transition:border-color .18s ease,background .18s ease}
+  .verchip .vt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;
+    letter-spacing:-.01em;color:var(--ink);transition:color .18s ease}
+  .verchip .vd{font:600 10px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+  .verchip .arw{display:inline-block;font-size:10px;color:var(--muted);
+    transition:transform .18s cubic-bezier(.2,.6,.2,1),color .18s ease}
+  .verchip:hover{border-color:var(--accent);background:var(--raise)}
+  .verchip:hover .vt,.verchip:hover .arw{color:var(--accent)}
+  .verchip:hover .arw{transform:translate(2px,-2px)}
   .status .dot{width:6px;height:6px;border-radius:50%;background:var(--in);
     box-shadow:0 0 0 0 var(--in);animation:beat 2.4s infinite}
   @keyframes beat{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--in) 65%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
@@ -292,7 +307,11 @@
 
 <div class="wrap">
   <header>
-    <span class="status"><span class="dot"></span>Live on Base Mainnet</span>
+    <div class="statusline">
+      <span class="status"><span class="dot"></span>Live on Base Mainnet</span>
+      <a class="verchip" href="https://github.com/edycutjong/summon/releases/tag/v0.3.1" target="_blank" rel="noopener"
+         title="Release v0.3.1, 2026-07-08"><span class="vt">v0.3.1</span><span class="vd">released 2026-07-08</span><span class="arw" aria-hidden="true">↗</span></a>
+    </div>
     <div class="hero-top">
       <img class="mark" src="./icon-animated.svg" alt="" onerror="this.onerror=null;this.src='./icon.svg'">
       <h1>Summon</h1>
@@ -505,7 +524,7 @@
     </div>
     <div class="rel">
       <span class="tag-dot" aria-hidden="true"></span>
-      <span class="v">v0.3.1</span>
+      <a class="v" href="https://github.com/edycutjong/summon/releases/tag/v0.3.1" target="_blank" rel="noopener">v0.3.1</a>
       <span class="sep" aria-hidden="true"></span>
       <span>released 2026-07-08</span>
       <span class="sep" aria-hidden="true"></span>
@@ -539,115 +558,112 @@
   } else { rev.forEach(function(el){ el.classList.add("in"); }); }
 })();
 
-/* ── ambient field ────────────────────────────────────────────────────────────
-   Agent nodes drift; an edge is drawn whenever two are close enough to trade;
-   a settlement pulse travels an edge every few seconds. Accent-tinted, ~10%
-   alpha, hero-only, and it holds a single static frame under reduced motion. */
 (function(){
   var host = document.createElement("div");
   host.className = "field"; host.setAttribute("aria-hidden","true");
   var cv = document.createElement("canvas"); host.appendChild(cv);
   document.body.insertBefore(host, document.body.firstChild);
+  var c = cv.getContext && cv.getContext("2d");
+  if(!c){ host.parentNode.removeChild(host); return; }
 
-  var ctx = cv.getContext && cv.getContext("2d");
-  if(!ctx){ host.parentNode.removeChild(host); return; }
-
-  var hex = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
-  var m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
-  var v = m ? parseInt(m[1],16) : 0x6366F1;
-  var RGB = (v>>16&255)+","+(v>>8&255)+","+(v&255);
-
-  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var W=0,H=0,D=150,nodes=[],pulses=[],raf=0,last=0;
+  var hx = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  var mm = /^#?([0-9a-fA-F]{6})$/.exec(hx), iv = mm ? parseInt(mm[1],16) : 0x6366F1;
+  var A = (iv>>16&255)+","+(iv>>8&255)+","+(iv&255);   /* project accent: identity */
+  var G = "95,214,138";                                /* --in: money and success only */
+  var W = 0, H = 0, raf = 0, last = 0, scene = null;
 
   function rnd(a,b){ return a+Math.random()*(b-a); }
+  function ease(t){ return t*t*(3-2*t); }
+  function dot(x,y,r,rgb,a){ c.fillStyle="rgba("+rgb+","+a.toFixed(3)+")";
+    c.beginPath(); c.arc(x,y,r,0,6.283); c.fill(); }
+  function ring(x,y,r,rgb,a,w){ if(r<=0) return; c.lineWidth=w||1;
+    c.strokeStyle="rgba("+rgb+","+a.toFixed(3)+")"; c.beginPath(); c.arc(x,y,r,0,6.283); c.stroke(); }
+  function seg(x1,y1,x2,y2,rgb,a,w){ c.lineWidth=w||1;
+    c.strokeStyle="rgba("+rgb+","+a.toFixed(3)+")";
+    c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2,y2); c.stroke(); }
+  /* every motif carries the same faint drift, so the seven read as one family */
+  function motes(n){ var a=[],i; for(i=0;i<n;i++) a.push({x:rnd(0,W),y:rnd(0,H*.9),
+    vx:rnd(-.1,.1),vy:rnd(-.06,.06),r:rnd(.7,1.5)}); return a; }
+  function moteStep(a,k){ for(var i=0;i<a.length;i++){ var m=a[i];
+    m.x+=m.vx*k; m.y+=m.vy*k;
+    if(m.x<-20) m.x=W+20; else if(m.x>W+20) m.x=-20;
+    if(m.y<-20) m.y=H+20; else if(m.y>H+20) m.y=-20; } }
+  function moteDraw(a){ for(var i=0;i<a.length;i++) dot(a[i].x,a[i].y,a[i].r,A,.16); }
+
+  /* THE FIGURE ZONE. Copy in the hero is left-aligned inside a 1020px wrap, so
+     the whitespace a figure may occupy is the right-hand third — a line drawn
+     across the claim reads as a strikethrough, not as a diagram. Below 900px
+     the layout is single-column and the zone recentres. Motes ignore this and
+     stay full-bleed; they are the texture that ties the seven together. */
+  var FX=0, FY=0, FW=0, FH=0;
+  function zone(){
+    var wide = W > 900;
+    FW = wide ? Math.min(W*.34, 400) : W*.86;
+    FX = wide ? W - FW*.5 - W*.05 : W*.5;
+    FY = H*.30;
+    FH = Math.min(H*.44, 400);
+  }
+
+  function MOTIF(W,H){
+    var gx=FX+FW*.12, top=FY-FH*.42, bot=FY+FH*.42, n=6, gap=(bot-top)/(n-1);
+    var q=[], out=[], rings=[], mo=motes(9), hold=0, i;
+    for(i=0;i<n;i++) q.push({y:top+gap*i, a:rnd(0,6.283), born:1});
+    return {
+      step:function(k){
+        moteStep(mo,k); hold+=k;
+        for(var i=0;i<q.length;i++){ q[i].a+=.02*k;
+          if(q[i].born<1) q[i].born=Math.min(1, q[i].born+k/70); }
+        for(i=out.length-1;i>=0;i--){ var o=out[i]; o.x+=o.v*k; o.f-=k/150;
+          if(o.f<=0) out.splice(i,1); }
+        for(i=rings.length-1;i>=0;i--){ rings[i].t+=k/95; if(rings[i].t>=1) rings.splice(i,1); }
+        /* one release at a time, deliberately slow — a person is deciding */
+        if(hold>115){ var j=(Math.random()*q.length)|0;
+          out.push({x:gx+6, y:q[j].y, v:rnd(.9,1.5), f:1});
+          rings.push({y:q[j].y, t:0}); q[j].born=0; hold=0; }
+      },
+      draw:function(){
+        moteDraw(mo);
+        var i;
+        c.save(); c.setLineDash([3,7]); seg(gx,top-30,gx,bot+30,A,.30); c.restore();
+        dot(gx,top-30,2,A,.34); dot(gx,bot+30,2,A,.34);
+        for(i=0;i<q.length;i++){ var w=q[i];
+          seg(gx-30,w.y,gx-10,w.y,A,.13*w.born);
+          dot(gx-30,w.y,2.3,A,(.30+.12*Math.sin(w.a))*w.born); }
+        for(i=0;i<rings.length;i++)
+          ring(gx,rings[i].y,4+rings[i].t*38,G,(1-rings[i].t)*.26);
+        for(i=0;i<out.length;i++){ var o=out[i]; dot(o.x,o.y,2.3,G,.46*o.f); }
+      }
+    };
+  }
 
   function build(){
     var r = host.getBoundingClientRect();
     W = Math.max(1, Math.round(r.width)); H = Math.max(1, Math.round(r.height));
-    var dpr = Math.min(window.devicePixelRatio||1, 2);
-    cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    D = Math.max(110, Math.min(195, W/8.5));
-    var count = Math.round(Math.max(12, Math.min(44, W*H/27000)));
-    nodes = []; pulses = [];
-    for(var i=0;i<count;i++){
-      var hub = i%7===0;
-      nodes.push({x:rnd(0,W), y:rnd(0,H*0.88), vx:rnd(-.13,.13), vy:rnd(-.08,.08),
-                  r:hub?rnd(2.1,3.0):rnd(.8,1.7), hub:hub, flare:0});
-    }
+    var d = Math.min(window.devicePixelRatio||1, 2);
+    cv.width = Math.round(W*d); cv.height = Math.round(H*d);
+    c.setTransform(d,0,0,d,0,0);
+    zone();
+    scene = MOTIF(W,H);
   }
+  function paint(k){ scene.step(k); c.clearRect(0,0,W,H); scene.draw(); }
+  function loop(ts){ var dt = last ? Math.min(50, ts-last) : 16.7; last = ts;
+    paint(dt/16.7); raf = requestAnimationFrame(loop); }
 
-  function step(k){
-    for(var i=0;i<nodes.length;i++){
-      var n = nodes[i];
-      n.x += n.vx*k; n.y += n.vy*k;
-      if(n.x < -30) n.x = W+30; else if(n.x > W+30) n.x = -30;
-      if(n.y < -30) n.y = H+30; else if(n.y > H+30) n.y = -30;
-      if(n.flare > 0) n.flare = Math.max(0, n.flare - k/55);
-    }
-    for(var p=pulses.length-1;p>=0;p--){
-      pulses[p].t += k/pulses[p].dur;
-      /* the receiving node flares when the payment lands */
-      if(pulses[p].t >= 1){ pulses[p].b.flare = 1; pulses.splice(p,1); }
-    }
-    if(pulses.length < 2 && Math.random() < .016){
-      var a = nodes[(Math.random()*nodes.length)|0], b = nodes[(Math.random()*nodes.length)|0];
-      if(a !== b && Math.hypot(a.x-b.x, a.y-b.y) < D) pulses.push({a:a,b:b,t:0,dur:rnd(70,130)});
-    }
-  }
-
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    ctx.lineWidth = 1;
-    for(var i=0;i<nodes.length;i++){
-      var a = nodes[i];
-      for(var j=i+1;j<nodes.length;j++){
-        var b = nodes[j], dx = a.x-b.x, dy = a.y-b.y, d2 = dx*dx+dy*dy;
-        if(d2 > D*D) continue;
-        var al = (1 - Math.sqrt(d2)/D) * .115;
-        ctx.strokeStyle = "rgba("+RGB+","+al.toFixed(3)+")";
-        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
-      }
-    }
-    for(var n=0;n<nodes.length;n++){
-      var o = nodes[n];
-      ctx.fillStyle = "rgba("+RGB+","+(o.hub?.34:.2)+")";
-      ctx.beginPath(); ctx.arc(o.x,o.y,o.r,0,6.283); ctx.fill();
-      if(o.hub){
-        ctx.strokeStyle = "rgba("+RGB+",.13)";
-        ctx.beginPath(); ctx.arc(o.x,o.y,o.r+5.5,0,6.283); ctx.stroke();
-      }
-      if(o.flare > 0){
-        ctx.strokeStyle = "rgba(95,214,138,"+(o.flare*.3).toFixed(3)+")";
-        ctx.beginPath(); ctx.arc(o.x,o.y,o.r+4+(1-o.flare)*13,0,6.283); ctx.stroke();
-      }
-    }
-    for(var q=0;q<pulses.length;q++){
-      var s = pulses[q], t = s.t, e = t*t*(3-2*t);
-      var x = s.a.x+(s.b.x-s.a.x)*e, y = s.a.y+(s.b.y-s.a.y)*e;
-      var fade = Math.sin(Math.PI*t);
-      ctx.fillStyle = "rgba(95,214,138,"+(fade*.55).toFixed(3)+")";
-      ctx.beginPath(); ctx.arc(x,y,1.9,0,6.283); ctx.fill();
-      ctx.fillStyle = "rgba(95,214,138,"+(fade*.12).toFixed(3)+")";
-      ctx.beginPath(); ctx.arc(x,y,5.5,0,6.283); ctx.fill();
-    }
-  }
-
-  function loop(ts){
-    var dt = last ? Math.min(50, ts-last) : 16.7; last = ts;
-    step(dt/16.7); draw(); raf = requestAnimationFrame(loop);
-  }
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   function start(){ if(!raf && !reduce){ last = 0; raf = requestAnimationFrame(loop); } }
   function stop(){ if(raf){ cancelAnimationFrame(raf); raf = 0; } }
 
-  build(); draw();
+  build();
+  /* reduced motion still gets a composed figure, not an empty box: run the
+     scene forward silently, then hold that single frame forever */
+  if(reduce){ for(var w=0; w<240; w++) scene.step(1); }
+  paint(0);
   if(reduce) return;
 
-  var pending = 0;
+  var pend = 0;
   addEventListener("resize", function(){
-    if(pending) cancelAnimationFrame(pending);
-    pending = requestAnimationFrame(function(){ pending = 0; build(); draw(); });
+    if(pend) cancelAnimationFrame(pend);
+    pend = requestAnimationFrame(function(){ pend = 0; build(); paint(0); });
   });
   addEventListener("scroll", function(){
     if(scrollY < host.offsetHeight) start(); else stop();
