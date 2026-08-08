@@ -589,6 +589,10 @@
     if(m.x<-20) m.x=W+20; else if(m.x>W+20) m.x=-20;
     if(m.y<-20) m.y=H+20; else if(m.y>H+20) m.y=-20; } }
   function moteDraw(a){ for(var i=0;i<a.length;i++) dot(a[i].x,a[i].y,a[i].r,A,.16); }
+  /* Cyclic figures fade in before they act and out after they finish, so the
+     reset to fresh random values lands while the element is invisible.
+     Without this the loop visibly pops back to its opening state. */
+  function env(t){ return t<.12 ? ease(t/.12) : (t>.90 ? ease((1-t)/.10) : 1); }
 
   /* THE FIGURE ZONE. Copy in the hero is left-aligned inside a 1020px wrap, so
      the whitespace a figure may occupy is the right-hand third — a line drawn
