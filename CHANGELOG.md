@@ -1,3 +1,10 @@
+## [0.3.2](https://github.com/edycutjong/summon/compare/v0.3.1...v0.3.2) (2026-08-22)
+
+
+### Bug Fixes
+
+* **deps:** resolve 1 dependency vulnerabilities via lockfile ([5d8119f](https://github.com/edycutjong/summon/commit/5d8119fda9126a1da1181a94bd598e580707b758))
+
 ## [0.3.1](https://github.com/edycutjong/summon/compare/v0.3.0...v0.3.1) (2026-07-08)
 
 
